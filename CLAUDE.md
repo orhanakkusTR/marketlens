@@ -588,6 +588,10 @@ Her dashboard'un altında. İçerik:
 
 ## 🆕 Manual Alert System (MVP)
 
+**⚡ Latency hedefi: <2 saniye.** Manuel alarm kontrolü **polling değil, WebSocket fiyat akışından** beslenmelidir. Adım 19'da yazılacak multi-symbol WebSocket stream'i, alarm worker'ına fiyat değişimini push'lar. Polling fallback olarak kalabilir (her 30 saniyede) ama ana mekanizma WebSocket.
+
+**Sebep:** Manuel alarm tetiklendiğinde kullanıcı **anında** aksiyon alacak (limit emir koyacak veya pozisyona girecek). 1 dakika polling = fırsat kaçar.
+
 Kullanıcı manuel fiyat alarmları kurar. Sistem `alerts` tablosundan ayrı, `user_alerts` tablosunda saklanır.
 
 **Alarm tipleri:**

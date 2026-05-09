@@ -902,6 +902,12 @@ Protected routes wrapper.
 
 ### Adım 19: Sol Sembol Paneli
 
+**⚡ Multi-symbol WebSocket stream BURADA tam yapılacak.** Adım 5'te tek-symbol skeleton'u vardı, şimdi:
+- 27 sembol için aynı anda fiyat akışı
+- Auto-reconnect + heartbeat
+- Callback dispatcher: yeni fiyat → (a) sol panel UI güncelle, (b) **alarm worker'a push** (Adım 21B kullanır)
+- Latency hedefi: <500ms (Binance'tan UI'ya)
+
 ```
 src/components/sidebar/SymbolPanel.tsx
 
@@ -1045,6 +1051,18 @@ Tüm metrikler için ⓘ tooltip:
 ---
 
 ### Adım 21B: Manual Alert System + /alerts Sayfası
+
+**⚡ KRİTİK: Alarm tetikleme mekanizması WebSocket-bazlı olmalı (polling değil).**
+
+Latency hedefi: **<2 saniye** (fiyat değişiminden Telegram bildirimine).
+
+Mimari:
+- Adım 19'da yazılan multi-symbol WS stream → fiyat değişiminde callback
+- Alarm worker bu callback'i dinler, in-memory `active_alerts` cache'inden sembol için aktif alarmları kontrol eder
+- Tetiklenirse anında bildirim gönderir (Telegram + DB güncelleme)
+- Polling (30 saniyede bir) sadece **fallback** olarak kalır (WS down olursa)
+
+**Sebep:** Polling 30sn ile A-setup oluşumu kabul edilebilir gecikme ama **manuel alarm hedefe ulaşma** anlık olmalı. Kullanıcı bildirim alır almaz Binance'a girip emir verecek.
 
 Bu adım, MVP'nin önemli bir parçası: kullanıcının elle yarattığı fiyat alarmları.
 

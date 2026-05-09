@@ -26,6 +26,7 @@ from app.core.middleware import (
     rate_limit_exceeded_handler,
 )
 from app.api.v1 import auth as auth_v1
+from app.api.v1 import indicators as indicators_v1
 from app.db.session import engine
 
 # Logging modül yüklenirken yapılandırılır — uvicorn başlamadan önce çalışsın diye.
@@ -50,7 +51,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Lazy import to avoid circular at module load
     from app.core.redis_client import close_redis
     from app.services.data_service import data_service
+    from app.services.indicators.engine import indicator_engine
 
+    await indicator_engine.close()
     await data_service.close()
     await close_redis()
     await engine.dispose()
@@ -95,6 +98,7 @@ app.add_exception_handler(Exception, unhandled_exception_handler)
 
 # ─── Routers ───
 app.include_router(auth_v1.router, prefix="/api/v1")
+app.include_router(indicators_v1.router, prefix="/api/v1")
 
 
 @app.get("/health")
