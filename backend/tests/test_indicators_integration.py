@@ -34,6 +34,67 @@ async def test_indicators_real_btc_4h() -> None:
     assert isinstance(bundle.momentum.macd.histogram, float)
     assert 0 <= bundle.momentum.stoch_rsi.k <= 100
 
+    # Volatility
+    assert bundle.volatility.atr.value_usdt > 0
+    assert bundle.volatility.atr.value_pct > 0
+    assert bundle.volatility.bollinger.upper > bundle.volatility.bollinger.lower
+    assert isinstance(bundle.volatility.bollinger.squeeze, bool)
+
+    # Volume
+    assert bundle.volume.obv.slope in ("rising", "falling", "flat")
+    assert bundle.volume.vwap is None  # 4H intraday değil
+    assert bundle.volume.volume_profile.poc > 0
+    assert (
+        bundle.volume.volume_profile.val
+        <= bundle.volume.volume_profile.poc
+        <= bundle.volume.volume_profile.vah
+    )
+
+    # Fibonacci (None olabilir)
+    if bundle.fibonacci is not None:
+        assert bundle.fibonacci.swing_high.price > bundle.fibonacci.swing_low.price
+        assert len(bundle.fibonacci.levels) == 8  # 5 retracement + 3 extension
+
+    # Levels
+    assert 0 < len(bundle.levels.supports) <= 5
+    assert 0 < len(bundle.levels.resistances) <= 5
+    for s in bundle.levels.supports:
+        assert s.price < bundle.levels.current_price
+    for r in bundle.levels.resistances:
+        assert r.price >= bundle.levels.current_price
+
+
+async def test_indicators_real_btc_1h_has_vwap() -> None:
+    """1H intraday → VWAP None olmamalı."""
+    bundle = await indicator_engine.compute_all("BTCUSDT", "1H")
+    assert bundle.volume.vwap is not None
+    assert bundle.volume.vwap.value > 0
+
+
+async def test_levels_endpoint_real(client) -> None:  # type: ignore[no-untyped-def]
+    """GET /api/v1/levels/BTCUSDT/4H çalışmalı."""
+    r = await client.get("/api/v1/levels/BTCUSDT/4H")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["symbol"] == "BTCUSDT"
+    assert body["timeframe"] == "4H"
+    assert "levels" in body
+    assert "fibonacci" in body
+    assert len(body["levels"]["supports"]) > 0
+    assert len(body["levels"]["resistances"]) > 0
+
+
+async def test_levels_endpoint_includes_round_numbers(client) -> None:  # type: ignore[no-untyped-def]
+    """BTC için levels listesinde round_major veya round_minor görünmeli."""
+    r = await client.get("/api/v1/levels/BTCUSDT/4H")
+    assert r.status_code == 200
+    body = r.json()
+    all_sources: list[str] = []
+    for lv in body["levels"]["supports"] + body["levels"]["resistances"]:
+        all_sources.extend(lv["sources"])
+    has_round = any(s.startswith("round_") for s in all_sources)
+    assert has_round, f"Hiç round number tespit edilmedi: {all_sources}"
+
 
 async def test_indicators_endpoint_real(client) -> None:  # type: ignore[no-untyped-def]
     """HTTP endpoint çalışmalı — schema valid."""

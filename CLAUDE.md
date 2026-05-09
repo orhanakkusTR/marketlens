@@ -621,6 +621,40 @@ Aksiyon Özeti'nde "📒 Journal'a Ekle" basıldığında:
 
 ---
 
+---
+
+## 🆕 Auto-Watch S/R Sistemi (MVP)
+
+Önemli destek/direnç seviyelerine **otomatik** alarm kuran sistem. Manuel alarma ek olarak çalışır.
+
+**Default semboller:** BTC, ETH, GOLD (Settings'ten yönetilir)
+**Kullanıcı ekleyebilir:** Watchlist mantığı — Settings'te ekleme/çıkarma
+**Timeframe:** 4H + 1D (sadece bunlardan tespit, 15m/1H çok gürültülü, 1W/1M çok uzak)
+
+**Tespit:** Adım 7'deki Auto S/R Levels modülü kullanılır. Top 5 destek + Top 5 direnç (4H ve 1D ayrı ayrı).
+
+**Otomatik alarm yaratımı:**
+- Her 6 saatte bir worker çalışır (06:00, 12:00, 18:00, 00:00 UTC)
+- Sembol başına S/R levels yeniden hesaplanır
+- Eski auto-generated alarmlar (henüz tetiklenmemiş) silinir
+- Yeni seviyeler için `approach` tipinde alarm yaratılır
+- `auto_generated=true` ve `target_role="auto_sr_4h"` veya `"auto_sr_1d"` flagleri set edilir
+
+**Bildirim:** 3 aşamalı yaklaşma (manuel alarm gibi):
+- Aşama 1 (1 ATR uzakta): "🟡 BTC desteğe yaklaşıyor — $79,800 ★★★"
+- Aşama 2 (0.5 ATR uzakta): "🟠 BTC desteğe çok yakın!"
+- Aşama 3 (dokundu): "🔴 BTC destekte!" (sesli + titreşim)
+
+**Günlük özet (opsiyonel):** Kullanıcı isterse sabah 09:00'da Telegram'da günlük seviye özeti gelir.
+
+**Ayarlar (Settings sayfasında):**
+- Auto-Watch ON/OFF (master switch)
+- Sembol listesi (default: BTC, ETH, GOLD; ekleme/çıkarma)
+- Timeframe seçimi (4H + 1D default; sadece 1D yapılabilir)
+- Min confluence threshold (default: 1, "tüm tespit edilen seviyeler"; 2 veya 3 yapılabilir)
+- Günlük özet ON/OFF
+
+
 ## Bildirim Önceliklendirmesi
 
 | Öncelik | Telegram | Push | Sound | Örnek |

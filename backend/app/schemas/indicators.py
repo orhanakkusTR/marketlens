@@ -126,6 +126,126 @@ class MomentumIndicators(_Strict):
     divergence_macd: DivergenceResult
 
 
+# ─── Volatility ───
+
+
+class ATRResult(_Strict):
+    value_usdt: float = Field(..., description="ATR mutlak değeri (fiyat birimi)")
+    value_pct: float = Field(..., description="ATR / price * 100")
+    period: int
+
+
+class BollingerResult(_Strict):
+    upper: float
+    middle: float
+    lower: float
+    width_pct: float = Field(..., description="(upper - lower) / middle * 100")
+    squeeze: bool = Field(..., description="Width son 100 mumun en alt %25'inde mi")
+
+
+class VolatilityIndicators(_Strict):
+    atr: ATRResult
+    bollinger: BollingerResult
+
+
+# ─── Volume ───
+
+
+VolumeSlope = Literal["rising", "falling", "flat"]
+
+
+class OBVResult(_Strict):
+    current: float
+    slope: VolumeSlope = Field(..., description="Son 20 mumun trend yönü")
+
+
+class VWAPResult(_Strict):
+    """4H+ TF için None döner (intraday-only)."""
+
+    value: float
+    distance_pct: float = Field(..., description="(price - vwap) / vwap * 100")
+    session_start_ms: int
+
+
+class VolumeProfileResult(_Strict):
+    poc: float = Field(..., description="Point of Control — en çok hacim olan fiyat")
+    vah: float = Field(..., description="Value Area High — %70 hacim üst sınırı")
+    val: float = Field(..., description="Value Area Low — %70 hacim alt sınırı")
+    total_volume: float
+    bin_count: int
+    window_bars: int
+
+
+class VolumeIndicators(_Strict):
+    obv: OBVResult
+    vwap: VWAPResult | None = Field(
+        None, description="4H ve üstü TF için None — intraday only"
+    )
+    volume_profile: VolumeProfileResult
+
+
+# ─── Fibonacci ───
+
+
+FibKind = Literal["retracement", "extension"]
+FibDirection = Literal["bullish", "bearish"]
+
+
+class FibLevel(_Strict):
+    ratio: float = Field(..., description="0.382, 0.5, 0.618, 1.618 vb.")
+    price: float
+    kind: FibKind
+
+
+class FibSwing(_Strict):
+    price: float
+    index: int
+    timestamp_ms: int
+
+
+class FibonacciResult(_Strict):
+    direction: FibDirection
+    swing_high: FibSwing
+    swing_low: FibSwing
+    levels: list[FibLevel]
+
+
+# ─── Auto S/R Levels ───
+
+
+LevelSource = Literal[
+    "pivot_high",
+    "pivot_low",
+    "fib_0.382",
+    "fib_0.5",
+    "fib_0.618",
+    "fib_0.786",
+    "fib_ext_1.272",
+    "fib_ext_1.618",
+    "fib_ext_2.618",
+    "vp_poc",
+    "vp_vah",
+    "vp_val",
+    "round_major",
+    "round_minor",
+]
+LevelKind = Literal["support", "resistance"]
+
+
+class LevelEntry(_Strict):
+    price: float
+    kind: LevelKind
+    sources: list[LevelSource]
+    confluence_count: int
+    strength_score: float
+
+
+class LevelsResult(_Strict):
+    current_price: float
+    supports: list[LevelEntry]
+    resistances: list[LevelEntry]
+
+
 # ─── Bundle ───
 
 
@@ -136,3 +256,9 @@ class IndicatorBundle(_Strict):
     kline_count: int
     trend: TrendIndicators
     momentum: MomentumIndicators
+    volatility: VolatilityIndicators
+    volume: VolumeIndicators
+    fibonacci: FibonacciResult | None = Field(
+        None, description="Major swing tespit edilemezse None"
+    )
+    levels: LevelsResult

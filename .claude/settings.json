@@ -23,7 +23,9 @@
       "Bash(curl -sS -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8000/api/v1/auth/me)",
       "Bash(curl -s -w \"\\\\nStatus: %{http_code}\\\\nTime: %{time_total}s\\\\n\" http://localhost:8000/api/v1/indicators/BTCUSDT/4H)",
       "Bash(curl -s -o /dev/null -w \"Status: %{http_code}\\\\n\" http://localhost:8000/api/v1/indicators/FOOBAR/4H)",
-      "Bash(curl -s -o /dev/null -w \"Status: %{http_code}\\\\n\" http://localhost:8000/api/v1/indicators/BTCUSDT/2H)"
+      "Bash(curl -s -o /dev/null -w \"Status: %{http_code}\\\\n\" http://localhost:8000/api/v1/indicators/BTCUSDT/2H)",
+      "Bash(curl -s http://localhost:8000/api/v1/levels/BTCUSDT/4H)",
+      "Bash(python3 -c \"import sys,json; d=json.loads\\(sys.stdin.read\\(\\)\\); print\\(json.dumps\\({k:v for k,v in d.items\\(\\) if k!='fibonacci'},indent=2\\)[:1500]\\)\")"
     ]
   }
 }

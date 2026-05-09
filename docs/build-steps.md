@@ -79,7 +79,7 @@ marketlens/
 ├── .env.example
 └── README.md
 
-Backend: Python 3.11, FastAPI, async.
+Backend: Python 3.12, FastAPI, async.
 Frontend: React 18 + Vite + TypeScript + TailwindCSS + shadcn/ui + lightweight-charts.
 docker-compose.yml: postgres, redis, backend, frontend (4 servis, health check, depends_on).
 .env.example: tüm değişkenler placeholder'la (CLAUDE.md'deki listeye göre).
@@ -1159,6 +1159,107 @@ Test:
 - Frontend: real-time fiyat akışı, modal akışı
 ```
 
+
+#### Auto-Watch S/R Modülü (alt-modül)
+
+Manuel alarm sistemine paralel çalışan otomatik destek/direnç alarm sistemi. Kullanıcı önemli sembollerin (BTC, ETH, GOLD vb.) kritik seviyelerini elle takip etmek zorunda kalmaz — sistem kendi tespit edip alarm kurar.
+
+**Default semboller:** BTC, ETH, GOLD
+**Default timeframes:** 4H + 1D (sadece bunlardan tespit)
+**Bildirim sıklığı:** Tüm tespit edilen önemli seviyeler (min confluence 1+)
+
+```
+backend/app/services/auto_watch.py:
+
+class AutoWatchService:
+    """
+    Önemli S/R seviyelerine otomatik alarm yaratır.
+    """
+    
+    DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "GOLD"]
+    DEFAULT_TIMEFRAMES = ["4H", "1D"]
+    
+    async def refresh_alerts_for_symbol(self, user_id, symbol, timeframes):
+        """
+        Bir sembol için S/R seviyelerini yeniden hesapla, alarmları güncelle.
+        - Adım 7'deki indicator_engine.compute_levels() kullanılır
+        - 4H ve 1D ayrı ayrı tespit edilir
+        - Eski auto-generated alarmlar (henüz tetiklenmemiş) silinir
+        - Yeni seviyeler için 'approach' alarmları yaratılır
+        - related_trade_id=NULL, auto_generated=True, target_role='auto_sr_4h' veya 'auto_sr_1d'
+        - Min confluence kontrolü (kullanıcı ayarına göre)
+        """
+    
+    async def daily_digest(self, user_id):
+        """
+        Sabah 09:00'da Telegram'a günlük özet at.
+        Format:
+        '☀️ Günaydın! Bugünkü kritik seviyeler:
+         BTC: yukarı $82,400★★★ | aşağı $79,800★★★ ...
+         ETH: yukarı $3,720★★★ | aşağı $3,250★★ ...
+         GOLD: yukarı $4,800★★★ | aşağı $4,580★★ ...'
+        """
+
+backend/app/workers/auto_watch_worker.py (Celery):
+
+@celery_app.task
+def refresh_auto_watch_alerts():
+    """
+    Her 6 saatte: 06:00, 12:00, 18:00, 00:00 UTC
+    Tüm aktif kullanıcılar için:
+        - Auto-Watch açıksa
+        - Auto-Watch sembollerinin S/R alarmlarını yenile
+    """
+
+@celery_app.task
+def send_daily_digest():
+    """
+    Sabah 09:00 (kullanıcı timezone'una göre)
+    Daily digest açıksa Telegram'a günlük özet
+    """
+
+backend/app/api/v1/auto_watch.py:
+
+GET    /api/v1/auto-watch/settings          # Mevcut ayar
+PATCH  /api/v1/auto-watch/settings          # Ayar güncelle
+POST   /api/v1/auto-watch/refresh-now       # Manuel tetikle (test)
+
+src/pages/Settings.tsx (Auto-Watch sekmesi):
+
+Layout:
+- Master switch: Auto-Watch ON/OFF
+- Sembol listesi:
+  - Default: BTC, ETH, GOLD (her zaman görünür, kapatabilirsin)
+  - "Sembol Ekle" butonu → 27 sembolden seç
+  - Her sembol yanında çıkar (X) butonu
+- Timeframe: ☑ 4H ☑ 1D (toggle)
+- Min confluence: dropdown (1, 2, 3) — default 1
+- Günlük özet ON/OFF
+- "Şimdi yenile" butonu (manuel tetikle, test için)
+- "Aktif alarmlar" küçük özet (kaç tane auto-watch alarm aktif)
+
+Auto-Watch ayarları DB'de:
+ALTER TABLE user_settings ADD COLUMN auto_watch_enabled BOOLEAN DEFAULT true;
+ALTER TABLE user_settings ADD COLUMN auto_watch_symbols TEXT[] DEFAULT ARRAY['BTCUSDT','ETHUSDT','GOLD'];
+ALTER TABLE user_settings ADD COLUMN auto_watch_timeframes TEXT[] DEFAULT ARRAY['4H','1D'];
+ALTER TABLE user_settings ADD COLUMN auto_watch_min_confluence INTEGER DEFAULT 1;
+ALTER TABLE user_settings ADD COLUMN auto_watch_daily_digest BOOLEAN DEFAULT true;
+
+Test:
+- Synthetic S/R levels → alarm yaratıldı doğrulaması
+- Worker idempotency (aynı saniyede 2 kez çağırma → çakışma yok)
+- Sembol kaldırılınca alarmları silinir
+- Auto-Watch kapatılınca tüm auto_generated alarmlar pasifleşir
+- Min confluence filtresi doğru çalışıyor
+- Daily digest formatlama testi
+
+Önemli notlar:
+- Auto-Watch alarmları 'auto_sr_4h' veya 'auto_sr_1d' role'leri ile işaretlenir
+- Manual alarm sistemiyle aynı user_alerts tablosunu kullanır
+- Aynı 3 aşamalı yaklaşma uyarısı (1 ATR / 0.5 ATR / hedef)
+- Tetiklenen Auto-Watch alarmları 7 gün cooldown (aynı seviye sürekli tetiklenmesin)
+```
+
 ---
 
 ---
@@ -1169,7 +1270,7 @@ Test:
 src/pages/Heatmap.tsx
 
 Tablo:
-- 25 sembol satır
+- 27 sembol satır
 - Sütunlar: sembol, fiyat, 24h%, 1H conf, 4H conf, 1D conf, setup quality, sektör
 - Renk kodu: confluence skoruna göre yeşil-sarı-kırmızı
 - Sıralama: tüm sütunlardan
@@ -1432,7 +1533,7 @@ Frontend:
 
 ### Adım 29 (Future): Scanner Tam + Watchlist Yönetimi
 
-**Validasyon kriteri:** Heatmap zaten 25 sembolü gösteriyor. Ekstra watchlist yönetimine gerçekten ihtiyacın var mı? Kullanmıyorsan **atla**.
+**Validasyon kriteri:** Heatmap zaten 27 sembolü gösteriyor. Ekstra watchlist yönetimine gerçekten ihtiyacın var mı? Kullanmıyorsan **atla**.
 
 ```
 backend/app/services/scanner.py:
