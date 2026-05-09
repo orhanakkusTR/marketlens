@@ -19,6 +19,7 @@ dependencies = [
     # Validation & settings
     "pydantic>=2.10.0",
     "pydantic-settings>=2.6.0",
+    "email-validator>=2.2.0",
 
     # Database
     "sqlalchemy>=2.0.36",
@@ -95,6 +96,11 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# Tüm async fixture'lar VE testler aynı event loop'u paylaşsın — modül seviyesi
+# async engine (app.db.session) ve asyncio.Lock (refresh_blacklist) için kritik.
+# İkisi de session olmalı; sadece biri ayarlıysa fixture/test farklı loop'lara düşer.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 addopts = "-ra --strict-markers"

@@ -25,6 +25,7 @@ from app.core.middleware import (
     limiter,
     rate_limit_exceeded_handler,
 )
+from app.api.v1 import auth as auth_v1
 from app.db.session import engine
 
 # Logging modül yüklenirken yapılandırılır — uvicorn başlamadan önce çalışsın diye.
@@ -83,6 +84,10 @@ app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
 # Fallback: handle edilmeyen tüm Exception'lar
 app.add_exception_handler(Exception, unhandled_exception_handler)
+
+
+# ─── Routers ───
+app.include_router(auth_v1.router, prefix="/api/v1")
 
 
 @app.get("/health")

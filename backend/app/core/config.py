@@ -35,8 +35,8 @@ class Settings(BaseSettings):
     # ─── JWT / Security ───
     jwt_secret_key: SecretStr
     jwt_algorithm: str = "HS256"
-    jwt_access_token_expire_minutes: int = 60
-    jwt_refresh_token_expire_days: int = 30
+    jwt_access_token_expire_minutes: int = 30
+    jwt_refresh_token_expire_days: int = 7
     # kid header (rotasyon): aktif key id; gelecekte v2, v3... olur.
     jwt_kid: str = "v1"
     # Rotasyon grace period için: JWT_OLD_SECRETS='{"v0": "old_secret_value"}'

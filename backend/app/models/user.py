@@ -33,6 +33,8 @@ class User(Base):
     telegram_chat_id: Mapped[str | None] = mapped_column(String(50))
     telegram_username: Mapped[str | None] = mapped_column(String(50))
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
+    # Adım 4: Şu an no-op (RBAC eklenmedi). create_user.py --is-admin için yer.
+    is_admin: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
