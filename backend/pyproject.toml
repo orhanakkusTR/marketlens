@@ -33,7 +33,8 @@ dependencies = [
     # HTTP & resilience
     "httpx>=0.27.2",
     "tenacity>=9.0.0",
-    "pybreaker>=1.2.0",
+    # Not: pybreaker'ın call_async'i tornado'ya bağımlı (yüklü değil) — kullanılmıyor.
+    # Custom AsyncCircuitBreaker (app/core/circuit_breaker.py) kullanılıyor.
     "slowapi>=0.1.9",
 
     # Logging
@@ -56,6 +57,9 @@ dependencies = [
 
     # Telegram
     "python-telegram-bot>=21.7",
+
+    # WebSocket (Binance real-time stream)
+    "websockets>=13.1",
 ]
 
 [dependency-groups]
@@ -103,8 +107,8 @@ asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
-addopts = "-ra --strict-markers"
+addopts = "-ra --strict-markers -m 'not integration'"
 markers = [
-    "integration: gerçek dış API kullanan testler (yavaş)",
+    "integration: gerçek dış API kullanan testler (yavaş, default skip; pytest -m integration ile çalıştır)",
     "slow: yavaş çalışan testler",
 ]

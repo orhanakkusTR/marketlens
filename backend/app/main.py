@@ -46,6 +46,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     yield
     logger.info("app_shutting_down")
+
+    # Lazy import to avoid circular at module load
+    from app.core.redis_client import close_redis
+    from app.services.data_service import data_service
+
+    await data_service.close()
+    await close_redis()
     await engine.dispose()
 
 
