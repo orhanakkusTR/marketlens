@@ -152,14 +152,27 @@ async def test_indicators_endpoint_full_includes_futures(client) -> None:  # typ
 
 
 async def test_futures_cache_hit_under_50ms() -> None:
-    """compute_futures 2. çağrı cache'ten <50ms."""
+    """compute_futures 2. çağrı cache'ten <50ms.
+
+    Hem indicators hem data layer cache'lerini temizle (gerçek miss simüle).
+    """
     import time
 
     from app.core.redis_client import redis_client
     from app.services.indicators.engine import indicator_engine
 
-    async for k in redis_client.scan_iter(match="marketlens:indicators:ETHUSDT:futures"):
-        await redis_client.delete(k)
+    # İndikatör + alt veri katmanı cache'lerini temizle
+    patterns = [
+        "marketlens:indicators:ETHUSDT:futures",
+        "marketlens:binance:funding:ETHUSDT",
+        "marketlens:binance:funding_hist:ETHUSDT:*",
+        "marketlens:binance:oi:ETHUSDT",
+        "marketlens:binance:oi_hist:ETHUSDT:*",
+        "marketlens:binance:lsr:ETHUSDT:*",
+    ]
+    for p in patterns:
+        async for k in redis_client.scan_iter(match=p):
+            await redis_client.delete(k)
 
     t0 = time.perf_counter()
     await indicator_engine.compute_futures("ETHUSDT")

@@ -26,6 +26,7 @@ from app.core.middleware import (
     rate_limit_exceeded_handler,
 )
 from app.api.v1 import auth as auth_v1
+from app.api.v1 import confluence as confluence_v1
 from app.api.v1 import indicators as indicators_v1
 from app.db.session import engine
 
@@ -99,6 +100,7 @@ app.add_exception_handler(Exception, unhandled_exception_handler)
 # ─── Routers ───
 app.include_router(auth_v1.router, prefix="/api/v1")
 app.include_router(indicators_v1.router, prefix="/api/v1")
+app.include_router(confluence_v1.router, prefix="/api/v1")
 
 
 @app.get("/health")

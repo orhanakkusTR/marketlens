@@ -20,6 +20,7 @@ from app.core.cache import cached_call
 from app.core.logging import get_logger
 from app.data.binance_spot import TF_TO_INTERVAL, TF_TTL
 from app.data.symbols_meta import has_futures as _has_futures
+from app.schemas.confluence import LocalConfluenceResult
 from app.schemas.indicators import (
     FibonacciResult,
     FuturesIndicators,
@@ -31,6 +32,7 @@ from app.schemas.indicators import (
     VolatilityIndicators,
     VolumeIndicators,
 )
+from app.services.confluence.local import compute_local_confluence
 from app.services.data_service import data_service
 from app.services.indicators.base import klines_to_dataframe, run_cpu_bound
 from app.services.indicators.fibonacci.auto_fib import compute_fibonacci
@@ -406,6 +408,52 @@ class IndicatorEngine:
             levels=levels,
             futures=futures,
         )
+
+    # ── local confluence ──
+    async def compute_local_confluence(
+        self,
+        symbol: str,
+        timeframe: str,
+    ) -> LocalConfluenceResult:
+        """Bundle'dan + df'den local confluence skoru üret."""
+        if timeframe not in TF_TO_INTERVAL:
+            raise ValueError(f"Bilinmeyen timeframe: {timeframe}")
+
+        async def fetch() -> dict[str, Any]:
+            klines = await self._get_klines(symbol, timeframe)
+            df = klines_to_dataframe(klines)
+
+            # Bundle: tüm modülleri al (cache'li, hızlı)
+            trend = await self.compute_trend(symbol, timeframe)
+            momentum = await self.compute_momentum(symbol, timeframe)
+            volatility = await self.compute_volatility(symbol, timeframe)
+            volume = await self.compute_volume(symbol, timeframe)
+            futures = await self.compute_futures(symbol)
+
+            price = float(df["close"].iloc[-1])
+
+            def _compute() -> dict[str, Any]:
+                result = compute_local_confluence(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    df=df,
+                    trend=trend,
+                    momentum=momentum,
+                    volume=volume,
+                    volatility=volatility,
+                    futures=futures,
+                    price=price,
+                )
+                return result.model_dump(mode="json")
+
+            return await run_cpu_bound(_compute)
+
+        raw = await cached_call(
+            key=f"confluence:local:{symbol}:{timeframe}",
+            ttl=TF_TTL[timeframe],
+            fetch_fn=fetch,
+        )
+        return LocalConfluenceResult.model_validate(raw)
 
     async def close(self) -> None:
         # Engine kendi resource tutmuyor (data_service ayrıca close edilir)
