@@ -101,6 +101,21 @@ class DataService:
     async def get_fear_greed(self) -> dict[str, Any]:
         return await self.fear_greed.get_fear_greed()
 
+    async def get_fear_greed_history(self, limit: int = 8) -> list[dict[str, Any]]:
+        return await self.fear_greed.get_history(limit)
+
+    # ─── CoinGecko historical ───
+    async def get_btc_market_cap_history(
+        self, days: int = 30
+    ) -> list[tuple[int, float]]:
+        return await self.coingecko.get_market_cap_history(coin_id="bitcoin", days=days)
+
+    # ─── yfinance historical (raw) ───
+    async def get_yfinance_history(
+        self, symbol: str, period: str = "30d", interval: str = "1d"
+    ) -> list[dict[str, Any]]:
+        return await self.yfinance.get_history(symbol, period, interval)
+
     # ─── Lifecycle ───
     async def close(self) -> None:
         await asyncio.gather(

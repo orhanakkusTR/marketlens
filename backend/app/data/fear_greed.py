@@ -28,3 +28,28 @@ class AlternativeMeClient(AbstractDataClient):
             "classification": d["value_classification"],
             "timestamp": d["timestamp"],
         }
+
+    async def get_history(self, limit: int = 8) -> list[dict[str, Any]]:
+        """Son `limit` günlük F&G geçmişi. limit=8 → bugün + 7 gün önce.
+
+        Alternative.me yeniden eskiye sırada döner; biz eski → yeni çeviriyoruz.
+        """
+        return await cached_call(
+            key=f"fng:history:{limit}",
+            ttl=3600,  # 1 saat
+            fetch_fn=lambda: self._fetch_history(limit),
+        )
+
+    async def _fetch_history(self, limit: int) -> list[dict[str, Any]]:
+        response = await self.request("GET", "/fng/", params={"limit": limit})
+        items = response.json()["data"]
+        # API yeniden eskiye sıralı — ters çevir (eski → yeni)
+        items.reverse()
+        return [
+            {
+                "value": int(item["value"]),
+                "classification": item["value_classification"],
+                "timestamp": item["timestamp"],
+            }
+            for item in items
+        ]

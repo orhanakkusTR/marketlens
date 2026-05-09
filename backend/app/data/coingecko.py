@@ -47,3 +47,21 @@ class CoinGeckoClient(AbstractDataClient):
         btc_d = float(data["market_cap_percentage"]["btc"])
         eth_d = float(data["market_cap_percentage"]["eth"])
         return total * (1 - (btc_d + eth_d) / 100)
+
+    @redis_cache("cg:mcap_history:{coin_id}:{days}", ttl=3600)  # 1 saat
+    async def get_market_cap_history(
+        self, coin_id: str = "bitcoin", days: int = 30
+    ) -> list[tuple[int, float]]:
+        """Coin market cap historical timeseries.
+
+        Returns: [(ts_ms, market_cap_usd), ...] eski → yeni.
+        Free tier: günlük granularity (days >= 2 için), saatlik (days <= 1).
+        """
+        response = await self.request(
+            "GET",
+            f"/coins/{coin_id}/market_chart",
+            params={"vs_currency": "usd", "days": days, "interval": "daily"},
+        )
+        data = response.json()
+        # market_caps: [[timestamp_ms, value], ...]
+        return [(int(ts), float(val)) for ts, val in data["market_caps"]]
