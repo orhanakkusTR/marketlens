@@ -1,0 +1,37 @@
+# MarketLens — production docker-compose override
+#
+# Henüz aktif değil. Adım 22 (Faz 1 polish) ve canlı kullanıma hazırlık döneminde detaylanacak.
+#
+# Plan (Adım 22'de):
+#   - Backend Dockerfile multi-stage (uv sync --frozen --no-dev → slim runtime image)
+#   - Frontend build edilip nginx üzerinden statik dosya olarak serve edilir
+#   - Bind mount yok, kaynak image içinde
+#   - Reload kapalı
+#   - Healthcheck'ler sıkılaştırılır
+#   - Sentry, log aggregator vs. eklenir
+#
+# Kullanım (gelecekte):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  backend:
+    restart: always
+    command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+
+  frontend:
+    restart: always
+    # TODO Adım 22: nginx ile statik build serve
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: marketlens-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # SSL sertifikaları production deploy'unda eklenecek
+    depends_on:
+      - backend
+      - frontend

@@ -1,0 +1,92 @@
+# MarketLens — development docker-compose
+# 4 servis: postgres, redis, backend, frontend
+#
+# Kullanım:
+#   cp .env.example .env
+#   docker compose up -d
+#   docker compose ps
+#   docker compose logs -f backend
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: marketlens-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-marketlens}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-marketlens_dev_password_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-marketlens}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-marketlens} -d ${POSTGRES_DB:-marketlens}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: marketlens-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: marketlens-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      # .venv'i named volume'da tut: bind-mount macOS performansı + Linux Docker uyumluluğu
+      - backend_venv:/app/.venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: marketlens-frontend
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      # node_modules'ü named volume'da tut (host'taki node_modules ile çakışmasın)
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_venv:
+  frontend_node_modules:
