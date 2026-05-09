@@ -12,7 +12,14 @@
       "Bash(docker compose *)",
       "Bash(curl -sS http://localhost:8000/health)",
       "Bash(curl -sS -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:5173/)",
-      "Bash(echo \"exit_code=$?\")"
+      "Bash(echo \"exit_code=$?\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -sS -i http://localhost:8000/health -H \"X-Request-ID: manual-test-abc-123\")",
+      "Bash(curl -sS -i http://localhost:8000/health)",
+      "Bash(curl -sS http://localhost:8000/this-does-not-exist)",
+      "Bash(curl -sS http://localhost:8000/health -H \"X-Request-ID: log-test-uuid-999\" -o /dev/null)",
+      "Bash(curl -sS -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:8000/docs)",
+      "Bash(curl -sS http://localhost:8000/nonexistent)"
     ]
   }
 }
