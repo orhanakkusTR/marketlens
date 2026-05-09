@@ -380,12 +380,87 @@ Response: {
 
 ---
 
-## Alerts
+## Alerts (Sistem alarmları)
 
 ### `GET /alerts?delivered=false&priority=high&limit=20`
 ### `POST /alerts/price`
 ### `DELETE /alerts/{id}`
 ### `POST /alerts/test-telegram`
+
+---
+
+## User Alerts (Manuel Alarm Sistemi — MVP)
+
+Kullanıcının elle yarattığı fiyat alarmları. 3 aşamalı yaklaşma desteği.
+
+### `GET /user-alerts?status=active&symbol=BTCUSDT`
+
+```json
+Response: {
+  "alerts": [
+    {
+      "id": "uuid",
+      "symbol": "BTCUSDT",
+      "alert_type": "approach",
+      "target_price": 70000.00,
+      "current_price": 67852.40,
+      "distance_atr": 2.53,
+      "current_stage": "none",  // "none" | "approaching" | "close" | "target_reached"
+      "approaching_triggered": false,
+      "close_triggered": false,
+      "target_triggered": false,
+      "note": "kırılırsa long açacağım",
+      "auto_generated": false,
+      "related_trade_id": null,
+      "created_at": "..."
+    }
+  ]
+}
+```
+
+### `POST /user-alerts`
+
+```json
+Request: {
+  "symbol_code": "BTCUSDT",
+  "alert_type": "approach",  // "price_above" | "price_below" | "approach"
+  "target_price": 70000.00,
+  "note": "kırılırsa long açacağım",
+  "notify_telegram": true,
+  "notify_sound": true,
+  "notify_vibrate": true
+}
+
+Response: { "id": "uuid", "status": "active", ... }
+```
+
+### `PATCH /user-alerts/{id}`
+Alarm düzenleme (target_price, notification settings, vb.)
+
+### `DELETE /user-alerts/{id}`
+Alarm silme.
+
+### `POST /user-alerts/from-trade/{trade_id}`
+
+Pozisyondan otomatik 4 alarm yaratır.
+
+```json
+Request: {
+  "include_tp1": true,
+  "include_tp2": true,
+  "include_tp3": true,
+  "include_sl": true
+}
+
+Response: {
+  "created_alerts": [
+    {"id": "...", "target_role": "tp1", ...},
+    {"id": "...", "target_role": "tp2", ...},
+    {"id": "...", "target_role": "tp3", ...},
+    {"id": "...", "target_role": "sl", ...}
+  ]
+}
+```
 
 ---
 

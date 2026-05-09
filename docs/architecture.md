@@ -14,6 +14,17 @@
 - **Geri besleme.** Trade journal ve pattern detection ile kullanıcının kendi performansından öğrenir.
 - **Aksiyon Özeti.** Her analizin sonunda tek bakışta "ne yapayım" cevabı.
 
+### KESİN KURAL — Manuel İşlem
+
+**Sistem ASLA borsaya otomatik emir göndermez.** MarketLens sadece bir **karar destek aracıdır** — tüm işlem tetikleri kullanıcının manuel müdahalesiyle gerçekleşir.
+
+- Sistem önerir, kullanıcı Binance'a manuel girip emri verir.
+- Trade Journal kayıtları kullanıcı tarafından manuel girilir veya "Pozisyon Detaylarını Kopyala" → Binance → açıldıktan sonra "Journal'a Ekle" butonu ile.
+- Position Management uyarıları **bilgilendiricidir**, otomatik aksiyon almaz. "Stop'a yaklaşıyor" mesajı atar, kullanıcı isterse Binance'tan kendisi taşır.
+- Binance trading API yetkilendirmesi gerekmez. Sadece public okuma yetkisi yeterlidir.
+
+Bu kural projenin temel güvenlik garantisidir. İleride otomatik trading istense bile **bu proje kapsamında değildir**, ayrı bir proje olarak ele alınmalıdır.
+
 ---
 
 ## 2. Stack Özeti
@@ -142,6 +153,7 @@
 |------|-----|
 | 1m mum | 30 sn |
 | 5m mum | 2 dk |
+| **15m mum** | **1 dk** |
 | 1h mum | 10 dk |
 | 4h mum | 30 dk |
 | 1d mum | 1 saat |
@@ -172,7 +184,7 @@ Sistem seçili timeframe'e göre **otomatik** uygun MA tipini kullanır:
 
 | TF | MA Tipi | Mantık |
 |----|---------|--------|
-| 1H, 4H | EMA 50, EMA 100, EMA 200 | Hızlı tepki kritik |
+| **15m, 1H, 4H** | EMA 50, EMA 100, EMA 200 | Hızlı tepki kritik |
 | 1D | EMA 50, EMA 100, **SMA 200** | EMA hızlı, SMA 200 kurumsal seviye |
 | 1W, 1M | SMA 50, SMA 100, SMA 200 | Uzun vade gürültü süzme |
 
@@ -402,17 +414,33 @@ final_confluence = clamp(final_confluence, -100, 100)
 
 #### Multi-Timeframe Alignment
 
-5 timeframe (1H, 4H, 1D, 1W, 1M) skorları üstüne alignment skoru:
+**6 timeframe** (15m, 1H, 4H, 1D, 1W, 1M) skorları üstüne alignment skoru:
 
 ```python
 alignment_score = (
-    final_confluence_1H * 0.10 +
-    final_confluence_4H * 0.20 +
-    final_confluence_1D * 0.30 +
-    final_confluence_1W * 0.25 +
-    final_confluence_1M * 0.15
+    final_confluence_15m * 0.05 +    # mikro timing
+    final_confluence_1H  * 0.10 +
+    final_confluence_4H  * 0.25 +    # ana karar TF
+    final_confluence_1D  * 0.30 +    # macro yön
+    final_confluence_1W  * 0.20 +
+    final_confluence_1M  * 0.10
 )
 ```
+
+**TF Rolleri:**
+| TF | Rol | Ağırlık |
+|----|-----|---------|
+| 15m | Timing + erken uyarı (giriş/çıkış mikro) | 0.05 |
+| 1H | Kısa vade momentum | 0.10 |
+| 4H | **Ana karar TF** | 0.25 |
+| 1D | **Macro yön (trend bağlamı)** | 0.30 |
+| 1W | Uzun vade context | 0.20 |
+| 1M | Çok uzun vade (info amaçlı) | 0.10 |
+
+**Önemli:** 15m **karar TF değildir**. Sadece **timing aracıdır**. Tek başına pozisyon açma sebebi olmamalı. Kullanım:
+- 4H/1D bullish + 15m'de bullish reversal → mükemmel giriş
+- 4H bullish + 15m parabolik yukarı → giriş için bekle (pullback)
+- 4H bullish + 15m'de BOS down → erken uyarı, dikkatli
 
 Label: "Strong" (>70 absolute), "Aligned" (>40), "Conflicted" (mixed signs).
 
@@ -447,6 +475,334 @@ Label: "Strong" (>70 absolute), "Aligned" (>40), "Conflicted" (mixed signs).
 **Sentiment Conflict (Faz 2):** Funding ekstrem + L/S aşırı + sistem aynı yön → otomatik 1 not düşürme.
 
 **Kullanım:** Sadece A ve B setup'ları öne çıkar. C uyarı ile, D filtrelenir.
+
+---
+
+### 4.6.1 Confidence Engine (MVP — KRİTİK)
+
+**Görev:** Sistemin **kendi tahminlerine** ne kadar güvenmesi gerektiğini ölçmek.
+
+**Sorun:** Setup quality A diyor → "%82 olasılık" çıkıyor. Ama bu rakam **kanıt seviyesi** olmadan **tehlikeli**. Çünkü sistem ilk kullanımda sadece **literatür bilgisine** dayanıyor, **gerçek performansa** değil.
+
+**Çözüm:** Olasılık (probability) ve Confidence ayrı ayrı gösterilir.
+
+```python
+class ConfidenceEngine:
+    
+    def compute_confidence(self, setup_signature, user_id) → ConfidenceLevel
+        """
+        Bu setup tipinde kaç işlem yapılmış? Win rate ne?
+        Trade journal'dan tarihsel veri al.
+        """
+        similar_trades = trade_journal.find_similar(
+            setup_signature,
+            user_id,
+            lookback_days=180
+        )
+        
+        n = len(similar_trades)
+        
+        if n < 5:
+            return {
+                "level": "VERY_LOW",
+                "label": "⚠️ Kanıt yok, deneme aşaması",
+                "trade_count": n,
+                "advice": "İlk 5-10 işlem küçük pozisyonla deneyim toplayın"
+            }
+        elif n < 15:
+            return {
+                "level": "LOW",
+                "label": "⚠️ Az veri, dikkatli",
+                "trade_count": n,
+                "advice": "Pozisyon boyutunu %50 küçültün"
+            }
+        elif n < 30:
+            actual_win_rate = sum(t.is_win for t in similar_trades) / n
+            return {
+                "level": "MEDIUM",
+                "label": "🟡 Orta kanıt",
+                "trade_count": n,
+                "actual_win_rate": actual_win_rate,
+                "advice": "Normal pozisyon, izlemeye devam"
+            }
+        elif n < 60:
+            return {
+                "level": "HIGH",
+                "label": "🟢 Güçlü kanıt",
+                ...
+            }
+        else:
+            return {
+                "level": "VERY_HIGH",
+                "label": "🟢 Çok güçlü kanıt",
+                ...
+            }
+```
+
+**Setup signature** (benzerlik tespiti):
+- Setup quality (A/B/C)
+- Macro regime (ALT_BULL, BTC_BULL, etc.)
+- Time of day (US, EU, Asia session)
+- Direction (long/short)
+- Symbol category (L1, L2, etc.)
+
+Aksiyon Özeti'nde **olasılık + confidence** birlikte gösterilir:
+
+```
+Olasılık (sistem hesabı): %82
+Confidence: LOW ⚠️
+   ↳ Bu setup tipinde 3 işlem var (gerçek win rate: 1/3)
+   ↳ 30+ işlem için tam güven gerekir
+   ↳ Bu setup'a girersen: pozisyon boyutunu %50 küçült öner.
+```
+
+**Önemli:** İlk haftalarda confidence sürekli LOW olacak. Bu **normal**. Trade Journal doldukça yükselir.
+
+---
+
+### 4.6.2 Counter-Trend Detector (MVP — KRİTİK)
+
+**Görev:** Sistemin kendi sinyalini **sorgulaması**. Bazı "kusursuz" görünen setup'lar **tuzaktır**.
+
+**Profesyonel sezgi:** Çok güzel görünen setup'larda **dikkat et**. Çünkü:
+- Çoğu kişi aynı şeyi gördüyse → kalabalık → squeeze riski
+- Parabolik hareket sonrası → exhaustion → reversal yakın
+- Hacim azalan trend → momentum bitiyor
+
+**Algoritma:**
+
+```python
+class CounterTrendDetector:
+    
+    def detect(self, market_data) → list[CounterTrendWarning]
+        warnings = []
+        
+        # 1. Parabolik hareket (son 2h içinde aşırı yukarı/aşağı)
+        price_change_2h = market_data.price_change_pct(hours=2)
+        if abs(price_change_2h) > 3.0:
+            warnings.append({
+                "type": "parabolic_move",
+                "severity": "high",
+                "message": f"2h içinde %{price_change_2h:.1f} hareket — exhaustion riski",
+                "advice": "Pullback bekle, FOMO'ya kapılma"
+            })
+        
+        # 2. Funding ekstrem (>%0.08 absolute)
+        if abs(market_data.funding_rate) > 0.0008:
+            direction = "long aşırı" if market_data.funding_rate > 0 else "short aşırı"
+            warnings.append({
+                "type": "extreme_funding",
+                "severity": "high",
+                "message": f"Funding {market_data.funding_rate*100:.3f}% — {direction} kalabalık, squeeze riski",
+                "advice": "Sistem aynı yöne sinyal veriyorsa karşıt yön de düşün"
+            })
+        
+        # 3. L/S Ratio aşırı
+        if market_data.ls_ratio > 3.0:
+            warnings.append({
+                "type": "extreme_ls",
+                "severity": "high",
+                "message": f"L/S {market_data.ls_ratio:.1f} — long aşırı sıkışmış",
+                "advice": "Long pozisyon riski yüksek"
+            })
+        elif market_data.ls_ratio < 0.33:
+            warnings.append({
+                "type": "extreme_ls",
+                "severity": "high",
+                "message": f"L/S {market_data.ls_ratio:.1f} — short aşırı sıkışmış",
+                "advice": "Short pozisyon riski yüksek"
+            })
+        
+        # 4. Volume exhaustion (yükselişte hacim azalan)
+        if (market_data.trend_direction == "up" and 
+            market_data.volume_decreasing_count >= 3):
+            warnings.append({
+                "type": "volume_exhaustion",
+                "severity": "medium",
+                "message": "Yükselişte hacim son 3 mum azalıyor — momentum bitiyor",
+                "advice": "Reversal yakın olabilir"
+            })
+        
+        # 5. RSI extreme + price stalling
+        if market_data.rsi_4h > 75 and abs(market_data.price_change_4h) < 0.5:
+            warnings.append({
+                "type": "rsi_divergence_setup",
+                "severity": "medium",
+                "message": "RSI aşırı alım + fiyat duruyor — bearish divergence kuruluyor",
+                "advice": "4H/1D divergence kontrol et"
+            })
+        
+        return warnings
+```
+
+**Aksiyon:**
+- 0 warning → normal
+- 1 warning → Aksiyon Özeti'nde göster, dikkat çek
+- 2+ warning → setup quality 1 not düşürülür, "🚨 KARŞIT SİNYAL UYARISI" bölümü
+- 3+ warning → "Bu setup'tan kaçınılması öneriliyor" mesajı
+
+**Aksiyon Özeti'nde gösterim:**
+
+```
+🚨 KARŞIT SİNYAL UYARISI:
+   Sistem long öneriyor AMA:
+   ✗ Funding %0.082 (long aşırı kalabalık)
+   ✗ L/S 3.4 (sıkışmış long pozisyonlar)
+   ✗ 2h içinde %3.4 yükseliş (parabolik)
+   
+   PROFESYONEL YORUM:
+   Bu pattern çoğu zaman "trap" olur. Reversal riski yüksek.
+   
+   ÖNERİ:
+   - Bu setup'tan kaçın, sonrasını bekle, VEYA
+   - Pozisyon boyutunu %50 küçült + sıkı stop
+```
+
+---
+
+### 4.6.3 Trade Quality Filter (MVP — KRİTİK)
+
+**Görev:** Confluence skoru yüksek olsa bile **vasat setup'ları ayıklar**.
+
+**Sorun:** Bazı setup'lar matematik olarak iyi görünür ama gerçek hayatta **edge yoktur**:
+- Range piyasada long açmak (TP'ye ulaşamaz)
+- Düşük volatilitede pozisyon (funding kâr potansiyelini yer)
+- S/R çok yakın (sıkışık piyasa, hareket alanı yok)
+
+**Algoritma:**
+
+```python
+class TradeQualityFilter:
+    
+    def evaluate(self, market_data) → TradeQualityResult
+        score = 0
+        factors = []
+        
+        # 1. Volatilite yeterli (ATR > %0.8)
+        atr_pct = market_data.atr / market_data.price * 100
+        if atr_pct > 0.8:
+            score += 1
+            factors.append({
+                "name": "volatility",
+                "passed": True,
+                "value": f"ATR %{atr_pct:.2f}",
+                "note": "Volatilite yeterli, hareket bekleniyor"
+            })
+        else:
+            factors.append({
+                "name": "volatility",
+                "passed": False,
+                "value": f"ATR %{atr_pct:.2f}",
+                "note": "Düşük volatilite, hareket yavaş olur, funding kâr yer"
+            })
+        
+        # 2. Range vs trend (ADX > 20 = trend)
+        if market_data.adx > 20:
+            score += 1
+            factors.append({
+                "name": "trend_strength",
+                "passed": True,
+                "value": f"ADX {market_data.adx:.0f}",
+                "note": "Trend piyasası, momentum devam edebilir"
+            })
+        else:
+            factors.append({
+                "name": "trend_strength",
+                "passed": False,
+                "value": f"ADX {market_data.adx:.0f}",
+                "note": "Range piyasası, trend pozisyonu zayıf kazanır"
+            })
+        
+        # 3. Macro netlik
+        if self._is_macro_aligned(market_data):
+            score += 1
+            factors.append({
+                "name": "macro_clarity",
+                "passed": True,
+                "note": "Macro sinyalleri uyumlu, net yön var"
+            })
+        else:
+            factors.append({
+                "name": "macro_clarity",
+                "passed": False,
+                "note": "Macro karışık (DXY/SP500 ters yönde), kafası karışık"
+            })
+        
+        # 4. Hacim yükseliyor (son 4 mum)
+        if market_data.volume_increasing_4candles:
+            score += 1
+            factors.append({
+                "name": "volume_growth",
+                "passed": True,
+                "note": "Hacim son 4 mumda yükseliyor — momentum güçlü"
+            })
+        else:
+            factors.append({
+                "name": "volume_growth",
+                "passed": False,
+                "note": "Hacim yatay, momentum zayıf"
+            })
+        
+        # 5. Major S/R arası >2 ATR mesafe
+        nearest_sr_distance = market_data.nearest_major_sr_distance
+        if nearest_sr_distance > 2 * market_data.atr:
+            score += 1
+            factors.append({
+                "name": "clear_path",
+                "passed": True,
+                "value": f"{nearest_sr_distance/market_data.atr:.1f} ATR",
+                "note": "Yakın S/R yok, hareket alanı temiz"
+            })
+        else:
+            factors.append({
+                "name": "clear_path",
+                "passed": False,
+                "value": f"{nearest_sr_distance/market_data.atr:.1f} ATR",
+                "note": "S/R çok yakın, sıkışık ortam"
+            })
+        
+        # Verdict
+        if score >= 4:
+            verdict = "EXCELLENT"
+            quality_modifier = +1  # setup quality +1 not
+        elif score >= 3:
+            verdict = "GOOD"
+            quality_modifier = 0
+        elif score >= 2:
+            verdict = "WEAK"
+            quality_modifier = -1  # setup quality -1 not, küçük pozisyon
+        else:
+            verdict = "AVOID"
+            quality_modifier = -2  # setup quality -2 not, açma önerme
+        
+    def _is_macro_aligned(self, market_data):
+        """DXY ve SP500 uyumlu mu? (kripto için)"""
+        # DXY düşüyor + SP500 yükseliyor = bullish kripto için
+        # DXY yükseliyor + SP500 düşüyor = bearish kripto için
+        # Ters yönde hareket = kafa karışık
+        dxy_dir = market_data.dxy_change_24h
+        spx_dir = market_data.sp500_change_24h
+        return (dxy_dir < 0 and spx_dir > 0) or (dxy_dir > 0 and spx_dir < 0)
+```
+
+**Aksiyon:**
+- AVOID (0-1 puan) → Aksiyon Özeti'nde "🚫 BU SETUP'TAN KAÇIN" gösterilir, pozisyon **önerilmez**
+- WEAK (2 puan) → Setup quality 1 not düşer, küçük pozisyon önerisi
+- GOOD (3 puan) → Normal aksiyon
+- EXCELLENT (4-5 puan) → Setup quality 1 not yükselebilir
+
+**Aksiyon Özeti'nde gösterim:**
+
+```
+TRADE QUALITY: GOOD (3/5)
+   ✓ Volatilite yeterli (ATR %1.2)
+   ✓ Trend piyasası (ADX 28)
+   ✓ Macro net (DXY ↓ + SP500 ↑)
+   ✗ Hacim yatay (son 4 mum)
+   ✗ S/R yakın (1.4 ATR)
+   
+   Aksiyon: Normal pozisyon ama hacmin yükselmesini bekleyebilirsin.
+```
 
 ---
 
@@ -893,6 +1249,168 @@ Geçmiş 3 yıllık veride sistem sinyallerini simüle eder.
 
 ---
 
+### 4.21 Manual Alert System (MVP — KRİTİK)
+
+**Görev:** Kullanıcının elle fiyat alarmları yaratmasını sağlar. 3 aşamalı yaklaşma uyarıları + pozisyon yardımcısı.
+
+**Tablo:** `user_alerts` (database-schema.md'de detay)
+
+#### Alarm Tipleri
+
+| Tip | Açıklama | Örnek |
+|-----|----------|-------|
+| `price_above` | Fiyat seviye üstüne çıkarsa | "BTC 70,000 üstüne çıkarsa" |
+| `price_below` | Fiyat seviye altına inerse | "BTC 65,000 altına inerse" |
+| `approach` | 3 aşamalı yaklaşma + ulaşma | "SOL 200'e yaklaşırsa" |
+
+#### 3 Aşamalı Yaklaşma Uyarısı
+
+`approach` tipinde sistem ATR'ye göre **otomatik mesafeler** hesaplar:
+
+```python
+class ApproachAlertEngine:
+    
+    def compute_distances(self, symbol, target_price) -> dict:
+        atr_4h = get_atr(symbol, "4H")
+        return {
+            "approaching_distance": atr_4h * 1.0,    # 1 ATR uzakta
+            "close_distance": atr_4h * 0.5,          # 0.5 ATR uzakta
+            "target_distance": 0                      # ulaştı
+        }
+    
+    def check_alert(self, alert, current_price) -> StageEvent | None:
+        distance = abs(current_price - alert.target_price)
+        distances = self.compute_distances(alert.symbol, alert.target_price)
+        
+        # 1. Aşama: Yaklaşıyor (1 ATR uzakta)
+        if (distance <= distances["approaching_distance"] 
+            and not alert.approaching_triggered):
+            return StageEvent("approaching", priority="low")
+        
+        # 2. Aşama: Çok yakın (0.5 ATR uzakta)
+        if (distance <= distances["close_distance"] 
+            and not alert.close_triggered):
+            return StageEvent("close", priority="medium")
+        
+        # 3. Aşama: Ulaştı (target geçildi/dokunuldu)
+        if self._target_reached(alert, current_price) and not alert.target_triggered:
+            return StageEvent("target_reached", priority="critical")
+        
+        return None
+```
+
+**Bildirim örnekleri:**
+
+```
+🟡 YAKLAŞIYOR — BTCUSDT
+Hedef: 70,000 (1 ATR uzakta)
+Şu an: 69,180 | Mesafe: 820 USDT
+Trade hazırlığını yapabilirsin.
+─────────────
+[Sessiz bildirim, sadece banner]
+```
+
+```
+🟠 ÇOK YAKIN — BTCUSDT
+Hedef: 70,000 (0.5 ATR uzakta)
+Şu an: 69,580 | Mesafe: 420 USDT
+Aksiyona hazırlan!
+─────────────
+[Titreşimli bildirim]
+```
+
+```
+🔴 HEDEFE ULAŞTI — BTCUSDT
+Hedef: 70,000 ✓
+Şu an: 70,012
+Aksiyon zamanı!
+─────────────
+[Sesli + titreşimli bildirim — KRİTİK]
+```
+
+#### Pozisyon Yardımcısı (Otomatik Alarm Yaratma)
+
+**Tetikleyici:** Aksiyon Özeti'nde "📒 Journal'a Ekle" butonuna basıldığında.
+
+**Akış:**
+
+```
+1. Kullanıcı pozisyon detaylarını gözden geçirir
+2. "Journal'a Ekle" butonu basılır
+3. Modal açılır:
+   "Bu pozisyon için otomatik alarmları yaratmak ister misin?"
+   
+   ✓ TP1 (3 aşamalı yaklaşma)
+   ✓ TP2 (3 aşamalı yaklaşma)
+   ✓ TP3 (3 aşamalı yaklaşma)
+   ✓ SL (3 aşamalı yaklaşma)
+   
+   [Evet, hepsini yarat] [Sadece TP'ler] [Hayır]
+
+4. Sistem 4 user_alerts kaydı yaratır:
+   - related_trade_id = trade_id (otomatik bağlantı)
+   - auto_generated = true
+   - target_role = "tp1" / "tp2" / "tp3" / "sl"
+   - alert_type = "approach"
+
+5. Pozisyon kapatıldığında (trade.status = 'closed'),
+   ilgili alarmlar otomatik 'cancelled' olur
+```
+
+**Otomatik alarm önceliği:**
+- TP yaklaşma uyarıları: TP'ye 0.5 ATR yaklaşınca → kritik (sesli)
+- SL yaklaşma uyarısı: SL'ye 0.5 ATR yaklaşınca → kritik (sesli)
+- "Yaklaşıyor" aşamaları: orta öncelik (titreşim)
+
+#### Worker (Arka Plan İşçisi)
+
+```python
+@celery_app.task
+def check_user_alerts():
+    """
+    Her 30 saniyede çalışır.
+    Tüm aktif user_alerts kayıtlarını döner ve fiyatlarla karşılaştırır.
+    Tetiklenen alarmlar için bildirim atar.
+    """
+    active_alerts = db.query(user_alerts).filter(status="active").all()
+    
+    # Sembolleri grupla, tek API call'da tüm fiyatları çek
+    symbols = set(a.symbol_id for a in active_alerts)
+    current_prices = batch_get_prices(symbols)
+    
+    for alert in active_alerts:
+        current_price = current_prices[alert.symbol_id]
+        
+        if alert.alert_type == "approach":
+            event = approach_engine.check_alert(alert, current_price)
+            if event:
+                send_notification(alert, event)
+                update_alert_stage(alert, event.stage)
+        
+        elif alert.alert_type == "price_above":
+            if current_price >= alert.target_price:
+                send_notification(alert, "target_reached")
+                mark_alert_triggered(alert)
+        
+        elif alert.alert_type == "price_below":
+            if current_price <= alert.target_price:
+                send_notification(alert, "target_reached")
+                mark_alert_triggered(alert)
+```
+
+#### Endpoint'ler
+
+```
+GET    /api/v1/user-alerts                      # Aktif alarmları listele
+GET    /api/v1/user-alerts/{id}                 # Tek alarm detayı
+POST   /api/v1/user-alerts                      # Yeni alarm yarat
+PATCH  /api/v1/user-alerts/{id}                 # Düzenle
+DELETE /api/v1/user-alerts/{id}                 # Sil
+POST   /api/v1/user-alerts/from-trade/{trade_id}  # Pozisyondan otomatik 4 alarm
+```
+
+---
+
 ## 5. Frontend Yapısı
 
 ### 5.1 Sayfalar
@@ -907,13 +1425,15 @@ Geçmiş 3 yıllık veride sistem sinyallerini simüle eder.
 
 **5. Risk** (`/risk`) — pozisyon hesaplayıcı + günlük durum
 
-**6. Backtest** (`/backtest`) — Faz 4
+**6. Alerts** (`/alerts`) — manuel fiyat alarmları (yarat, düzenle, takip et) — **MVP**
 
-**7. AI Assistant** (`/ai`) — Faz 4, chat arayüzü
+**7. Backtest** (`/backtest`) — Faz 4
 
-**8. Settings** (`/settings`) — tüm ayarlar
+**8. AI Assistant** (`/ai`) — Faz 4, chat arayüzü
 
-**9. Glossary** (`/glossary`) — terimler sözlüğü
+**9. Settings** (`/settings`) — tüm ayarlar
+
+**10. Glossary** (`/glossary`) — terimler sözlüğü
 
 ### 5.2 Dashboard Layout
 
@@ -1066,7 +1586,16 @@ Detaylı: `api-endpoints.md`
 
 ## 8. Faz Özeti
 
-### Faz 1 — Temel (4-5 hafta)
+### 🎯 MVP Yaklaşımı
+
+**Aktif Build Kapsamı = Adım 1-26 (yaklaşık 3 ay).**
+
+Bu kapsam dışında kalan tüm özellikler **Future Roadmap**'tedir ve **6 ay canlı kullanım sonrası gerçek ihtiyaca göre** seçici eklenecek. **"Hepsini build et" yaklaşımı reddedildi.** "Iterate and validate" felsefesi benimsendi.
+
+---
+
+### Faz 1 — Temel (4-5 hafta) — MVP DAHIL ✅
+**Adım 1-22**
 - Backend + Frontend iskelet
 - Data ingestion (Binance, CoinGecko, yfinance)
 - Indicator engine + dinamik MA + tüm klasik indikatörler
@@ -1074,38 +1603,60 @@ Detaylı: `api-endpoints.md`
 - Senaryo üretici + Aksiyon Özeti
 - Risk yönetimi (volatility-adjusted)
 - No-trade zone (macro events + time-of-day)
-- Heatmap dashboard
-- Order book heatmap
+- Heatmap dashboard + Order book heatmap
 - Smart bildirim önceliklendirmesi
 - Volatility Alert + Quick Signal
 - Sol sembol paneli + tooltip + sözlük
 
-### Faz 2 — Profesyonel (3-4 hafta)
-- Coinglass entegrasyonu (likidasyon heatmap, ETF flow)
+### Faz 2 — Profesyonel İlk Yarısı (2-3 hafta) — MVP DAHIL ✅
+**Adım 23-26**
+- Coinglass entegrasyonu (likidasyon heatmap)
 - Smart Money Concepts (OB, FVG, Liquidity Sweep, BOS/CHoCH)
 - News feed (CryptoPanic)
 - Cross-Asset Rotation Tracker
-- Halving sayacı
-- Scanner + Watchlist tam
-- Telegram bot tam
-- Otomatik ekonomik takvim
 
-### Faz 3 — Akıllı (3 hafta)
-- Trade journal full + position monitoring
-- Position management (trailing, partial close)
-- Portfolio manager (toplam risk, sektör exposure)
-- Pattern detection
-- Korelasyon uyarısı tam
-- Sentiment conflict detector
-- Win rate by setup type detaylı
-- Basit on-chain (Etherscan)
+### 🛑 ADIM 26 SONUNDA DUR — 3 AY CANLI KULLAN
 
-### Faz 4 — İleri (2-3 hafta)
-- Backtest motoru
-- Wyckoff Schematics
-- AI Assistant (Claude API)
+---
+
+### 🔮 Future Roadmap — 6 Ay Sonra Değerlendir
+
+⚠️ Aşağıdaki özellikler **şimdi build edilmiyor**. Her birinin kendi **validasyon kriteri** var (build-steps.md'de detay). 6 ay canlı kullanım sonrası **gerçekten ihtiyaç duyduğun** olanları seçici ekle.
+
+#### Future — Faz 2 Kalanı (Adım 27-30)
+- Halving sayacı + ETF flow
+- Otomatik ekonomik takvim (forexfactory scrape)
+- Scanner + Watchlist tam yönetimi
+- Telegram bot ileri komutlar (/btc, /scan, vb.)
+
+#### Future — Faz 3 (Adım 31-37)
+- **Trade Journal Full + Pattern Detection** — büyük ihtimal eklenir, 50+ işlem sonra
+- Position Monitoring + Management (trailing, partial close, BE)
+- Portfolio Manager (toplam risk, sektör exposure)
+- Korelasyon + Sentiment Conflict tam
+- Win Rate by Setup Type detaylı
+- Basit On-Chain (Etherscan free)
+
+#### Future — Faz 4 (Adım 38-43)
+- Backtest motoru (3 yıl) — **dikkat: overfitting riski**
+- **Wyckoff Schematics — OPSİYONEL** (manuel daha doğru olabilir)
+- AI Assistant (Claude API) — gerçekten lazım mı?
 - Mobil PWA optimizasyon
-- Setup tipine göre detaylı stats
+- Setup type detaylı stats
+- Final polish + Production deploy
+
+---
+
+### Build Süreci
+
+| Faz | Süre | Durum |
+|-----|------|-------|
+| MVP Build (Adım 1-26) | ~3 ay | **Aktif geliştirme** |
+| Canlı kullanım + paper trade | 3 ay | Gerçek veri toplama |
+| Future Roadmap değerlendirme | 1 hafta | Hangi özellikler gerçekten lazım? |
+| Future Roadmap selektif geliştirme | 1-3 ay | Sadece validate edilmiş özellikler |
+
+**Toplam tahmini timeline:** 8-12 ay (full sistem). MVP hazır olduğunda **kullanıma alınır**, sonrası kademeli.
 
 ---
 

@@ -1,6 +1,33 @@
-# MarketLens — Build Steps (v2)
+# MarketLens — Build Steps (v3)
 
-Bu dosya 43 adımlık yapılandırılmış prompt sequence'idir. Her adım Claude Code'a ayrı bir prompt olarak verilir.
+Bu dosya yapılandırılmış prompt sequence'idir. Her adım Claude Code'a ayrı bir prompt olarak verilir.
+
+## 🎯 MVP Yaklaşımı — Aktif Build Kapsamı
+
+**Adım 1-26'ya odaklan.** Bu, yaklaşık **3 aylık** bir build süresi ve şunları içerir:
+- **Faz 1 (Adım 1-22):** Tam temel sistem
+- **Faz 2 — Önemli Yarısı (Adım 23-26):** Coinglass, SMC, News Feed, Sentiment Conflict
+
+**Adım 26 = canlı kullanım başlangıcı.** Bu noktada sistem tam fonksiyonel:
+- Tüm indikatörler + 2-katmanlı confluence
+- Macro entegrasyonu + korelasyon
+- SMC (Order Block, FVG, Liquidity Sweep, BOS/CHoCH)
+- Aksiyon Özeti + Heatmap + Aksiyon önerisi
+- Risk yönetimi + No-trade zone
+- Telegram bildirimleri + Trade Journal temel
+- News Feed + Sentiment Conflict Detector
+- Coinglass likidasyon haritası
+
+**Adım 27+ "Future Roadmap"** olarak işaretlendi. **Şimdi build edilmeyecek.** 6 ay canlı kullanım sonrası, gerçek ihtiyaçlar belli olduğunda **seçici olarak** eklenecek.
+
+### 🚦 Kuralı
+
+1. Adım 1'den başla, sırayla git.
+2. Her adım sonu test et, çalışınca commit.
+3. Adım 26'ya geldiğinde **DURVR**.
+4. 3 ay canlı kullan (paper trade + küçük gerçek pozisyon).
+5. Hangi özelliklerin gerçekten lazım olduğunu **veriden** gör.
+6. 6 ay sonra Future Roadmap'i **gerçek ihtiyaca göre** önceliklendir.
 
 ---
 
@@ -146,7 +173,7 @@ pytest auth flow + protected endpoint testi.
 ```
 backend/app/data/:
 - base.py: AbstractDataClient
-- binance_spot.py: BinanceSpotClient (OHLCV)
+- binance_spot.py: BinanceSpotClient (OHLCV — 15m, 1H, 4H, 1D, 1W, 1M)
 - binance_futures.py: BinanceFuturesClient (funding, OI, L/S, liquidations)
 - binance_depth.py: BinanceDepthClient (order book)
 - binance_ws.py: BinanceWebSocketClient (real-time)
@@ -160,6 +187,13 @@ Her client:
 - Circuit breaker (pybreaker)
 - Redis cache decorator
 - Rate limit aware
+
+Cache TTL'ler (15m için yeni ekleme):
+- 15m mum: 60 sn
+- 1H mum: 10 dk
+- 4H mum: 30 dk
+- 1D mum: 1 saat
+- (diğerleri architecture.md'de)
 
 backend/app/services/data_service.py:
 - Unified facade
@@ -353,7 +387,8 @@ def compute_final_confluence(local_score, macro_modifier) → float
 backend/app/services/confluence/alignment.py:
 
 def compute_multi_tf_alignment(scores_by_tf) → dict
-    # Ağırlıklar: 1H 0.10, 4H 0.20, 1D 0.30, 1W 0.25, 1M 0.15
+    # Ağırlıklar: 15m 0.05, 1H 0.10, 4H 0.25, 1D 0.30, 1W 0.20, 1M 0.10
+    # 15m sadece timing, ana karar 4H + 1D
     # Label: Strong/Aligned/Conflicted
 ```
 
@@ -386,7 +421,9 @@ Cron job: her saat full matrix güncelle.
 
 ---
 
-### Adım 13: Setup Quality Engine
+### Adım 13: Setup Quality Engine + 3 Kritik Modül (Confidence, Counter-Trend, Trade Quality)
+
+Bu adım **dört modülü birden** içerir. Hepsi Setup Quality skoruna birlikte etki eder.
 
 ```
 backend/app/services/setup_quality.py:
@@ -412,9 +449,255 @@ def compute_setup_quality(analysis) → dict
     if macro_modifier > 15: grade += 1  # not yükselt
     if macro_modifier < -15: grade -= 1
     
-    return {score, grade, factors}
+    # Counter-trend etkisi (aşağıda detaylı):
+    if counter_trend_warnings_count >= 2: grade -= 1
+    
+    # Trade quality etkisi:
+    if trade_quality.verdict == "EXCELLENT": grade += 1
+    elif trade_quality.verdict == "WEAK": grade -= 1
+    elif trade_quality.verdict == "AVOID": grade = "D"  # ne olursa olsun açma
+    
+    return {score, grade, factors, confidence, counter_trend_warnings, trade_quality}
 
-Test: çeşitli kombinasyonlar.
+backend/app/services/confidence_engine.py:
+
+class ConfidenceEngine:
+    """
+    Sistemin TAHMİNİNE ne kadar güvenmesi gerektiğini ölçer.
+    Bu, olasılık (probability) değil, kanıt seviyesidir.
+    
+    Trade journal verisinden hesaplanır.
+    """
+    
+    def compute_confidence(self, setup_signature, user_id) -> dict:
+        # setup_signature: macro_regime + setup_quality + direction + 
+        #                  symbol_category + market_session
+        
+        similar_trades = trade_journal.find_similar(
+            setup_signature, user_id, lookback_days=180
+        )
+        
+        n = len(similar_trades)
+        
+        if n < 5:
+            level = "VERY_LOW"
+            label = "⚠️ Kanıt yok, deneme aşaması"
+            advice = "İlk 5-10 işlem küçük pozisyonla deneyim toplayın"
+        elif n < 15:
+            level = "LOW"
+            label = "⚠️ Az veri, dikkatli"
+            advice = "Pozisyon boyutunu %50 küçültün"
+        elif n < 30:
+            level = "MEDIUM"
+            label = "🟡 Orta kanıt"
+            advice = "Normal pozisyon, izlemeye devam"
+        elif n < 60:
+            level = "HIGH"
+            label = "🟢 Güçlü kanıt"
+            advice = "Tam pozisyon önerilir"
+        else:
+            level = "VERY_HIGH"
+            label = "🟢 Çok güçlü kanıt"
+            advice = "Bu setup tipinde sistem güvenilir"
+        
+        actual_win_rate = (
+            sum(t.is_win for t in similar_trades) / n if n > 0 else None
+        )
+        
+        return {
+            "level": level,
+            "label": label,
+            "trade_count": n,
+            "actual_win_rate": actual_win_rate,
+            "advice": advice
+        }
+
+backend/app/services/counter_trend.py:
+
+class CounterTrendDetector:
+    """
+    Sistem kendi sinyalini SORGULAR.
+    "Kusursuz" görünen setup'lar tuzak olabilir.
+    """
+    
+    def detect(self, market_data, signal_direction) -> list[Warning]:
+        warnings = []
+        
+        # 1. Parabolik hareket (2h içinde >%3)
+        if abs(market_data.price_change_2h) > 3.0:
+            warnings.append({
+                "type": "parabolic_move",
+                "severity": "high",
+                "message": f"2h içinde %{market_data.price_change_2h:.1f} hareket",
+                "advice": "Pullback bekle, FOMO'ya kapılma"
+            })
+        
+        # 2. Funding ekstrem
+        if abs(market_data.funding_rate) > 0.0008:
+            warnings.append({
+                "type": "extreme_funding",
+                "severity": "high",
+                "message": f"Funding {market_data.funding_rate*100:.3f}%",
+                "advice": "Aşırı kalabalık, squeeze riski"
+            })
+        
+        # 3. L/S aşırı (sistem long öneriyor + L/S çok yüksek)
+        if signal_direction == "long" and market_data.ls_ratio > 3.0:
+            warnings.append({
+                "type": "extreme_ls_long",
+                "severity": "high",
+                "message": f"L/S {market_data.ls_ratio:.1f} — long sıkışmış"
+            })
+        if signal_direction == "short" and market_data.ls_ratio < 0.33:
+            warnings.append({
+                "type": "extreme_ls_short",
+                "severity": "high",
+                "message": f"L/S {market_data.ls_ratio:.1f} — short sıkışmış"
+            })
+        
+        # 4. Volume exhaustion
+        if signal_direction == "long" and market_data.volume_decreasing_count >= 3:
+            warnings.append({
+                "type": "volume_exhaustion",
+                "severity": "medium",
+                "message": "Yükselişte hacim azalıyor"
+            })
+        
+        # 5. RSI extreme + price stalling
+        if (market_data.rsi_4h > 75 and abs(market_data.price_change_4h) < 0.5):
+            warnings.append({
+                "type": "rsi_stall",
+                "severity": "medium",
+                "message": "RSI aşırı + fiyat duruyor — bearish divergence kuruluyor"
+            })
+        
+        return warnings
+
+backend/app/services/trade_quality_filter.py:
+
+class TradeQualityFilter:
+    """
+    Confluence yüksek olsa bile VASAT setup'ları ayıklar.
+    Edge'i olmayan setup'ları işaretler.
+    """
+    
+    def evaluate(self, market_data) -> dict:
+        score = 0
+        factors = []
+        
+        # 1. Volatilite yeterli (ATR > %0.8)
+        atr_pct = market_data.atr / market_data.price * 100
+        passed = atr_pct > 0.8
+        if passed: score += 1
+        factors.append({
+            "name": "volatility",
+            "passed": passed,
+            "value": f"ATR %{atr_pct:.2f}",
+            "note": ("Volatilite yeterli" if passed 
+                     else "Düşük volatilite, hareket yavaş, funding kâr yer")
+        })
+        
+        # 2. Trend strength (ADX > 20)
+        passed = market_data.adx > 20
+        if passed: score += 1
+        factors.append({
+            "name": "trend_strength",
+            "passed": passed,
+            "value": f"ADX {market_data.adx:.0f}",
+            "note": ("Trend piyasası" if passed 
+                     else "Range piyasası, trend pozisyonu zayıf")
+        })
+        
+        # 3. Macro netlik (DXY/SP500 uyumlu)
+        macro_aligned = self._is_macro_aligned(market_data)
+        if macro_aligned: score += 1
+        factors.append({
+            "name": "macro_clarity",
+            "passed": macro_aligned,
+            "note": ("Macro net" if macro_aligned 
+                     else "Macro karışık (DXY/SP500 ters yönde)")
+        })
+        
+        # 4. Volume büyüyor (son 4 mum)
+        passed = market_data.volume_increasing_4candles
+        if passed: score += 1
+        factors.append({
+            "name": "volume_growth",
+            "passed": passed,
+            "note": ("Hacim yükseliyor" if passed else "Hacim yatay, momentum zayıf")
+        })
+        
+        # 5. Major S/R uzakta (>2 ATR)
+        sr_distance_atr = market_data.nearest_major_sr_distance / market_data.atr
+        passed = sr_distance_atr > 2.0
+        if passed: score += 1
+        factors.append({
+            "name": "clear_path",
+            "passed": passed,
+            "value": f"{sr_distance_atr:.1f} ATR",
+            "note": ("Yakın S/R yok, hareket alanı temiz" if passed 
+                     else "S/R yakın, sıkışık")
+        })
+        
+        # Verdict
+        if score >= 4:
+            verdict = "EXCELLENT"
+            quality_modifier = +1
+        elif score >= 3:
+            verdict = "GOOD"
+            quality_modifier = 0
+        elif score >= 2:
+            verdict = "WEAK"
+            quality_modifier = -1
+        else:
+            verdict = "AVOID"
+            quality_modifier = -2
+        
+        return {
+            "score": score,
+            "verdict": verdict,
+            "quality_modifier": quality_modifier,
+            "factors": factors
+        }
+    
+    def _is_macro_aligned(self, market_data):
+        # DXY ↓ + SP500 ↑ = bullish kripto
+        # DXY ↑ + SP500 ↓ = bearish kripto
+        dxy_dir = market_data.dxy_change_24h
+        spx_dir = market_data.sp500_change_24h
+        return (dxy_dir < 0 and spx_dir > 0) or (dxy_dir > 0 and spx_dir < 0)
+
+
+# Aksiyon Özeti payload'ı:
+{
+    "setup_quality": {
+        "grade": "A",
+        "score": 92,
+        "factors": [...]
+    },
+    "confidence": {
+        "level": "LOW",
+        "label": "⚠️ Az veri, dikkatli",
+        "trade_count": 8,
+        "actual_win_rate": 0.625,
+        "advice": "Pozisyon boyutunu %50 küçültün"
+    },
+    "counter_trend_warnings": [
+        {"type": "extreme_funding", "severity": "high", ...},
+        ...
+    ],
+    "trade_quality": {
+        "score": 4,
+        "verdict": "EXCELLENT",
+        "factors": [...]
+    }
+}
+
+Test: 
+- Çeşitli market koşulları için fixture'lar
+- Confidence engine: synthetic trade history ile test
+- Counter-trend: bilinen "trap" senaryoları için
+- Trade quality: range/trend/exhaustion senaryoları için
 ```
 
 ---
@@ -685,7 +968,7 @@ Analiz: useQuery → POST /api/v1/analysis/run.
 
 ---
 
-### Adım 21: Aksiyon Özeti + Hesabı Göster Modal
+### Adım 21: Aksiyon Özeti + Hesabı Göster Modal + Pozisyon Yardımcısı
 
 ```
 src/components/dashboard/ActionSummary.tsx
@@ -694,22 +977,171 @@ KRİTİK BILEŞEN. CLAUDE.md ve architecture.md'deki spec'e tam uyum.
 
 İçerik:
 1. Üst başlık (renk kodlu): 🟢 LONG ÖNERİLİYOR / 🔴 SHORT / ⚠️ DİKKAT / 🚫 NO-TRADE
+   - Setup Quality (A/B/C/D) badge
+   - **Olasılık + Confidence** (yan yana, ikisi de görünmeli):
+     "Olasılık: %82 | Confidence: LOW ⚠️"
+   
 2. Pozisyon detayları (monospace, kopyala-yapıştır hazır)
-3. Destek/Direnç tablosu (yukarı dirençler → mevcut → aşağı destekler, golden ★)
-4. Dikkat edilecekler kartı (sağda)
-5. Görüş değişir eğer kartı
-6. Aksiyon butonları:
+   - Confidence LOW ise: "⚠️ Bu setup tipinde 8 işlem var, pozisyon boyutu %50 küçültüldü"
+   - Trade Quality WEAK ise: "⚠️ Trade Quality 2/5, küçük pozisyon önerildi"
+   
+3. **🚨 Karşıt Sinyal Uyarısı kartı** (eğer counter-trend warnings varsa)
+   - Hangi uyarılar tetiklendi listesi
+   - "Bu pattern çoğu zaman trap olur" mesajı
+   - Sistem önerisi (kaçın / küçük pozisyon)
+
+4. **Trade Quality kartı**
+   - 5 faktörden kaç tanesi geçti
+   - Her faktör için ✓/✗ ve açıklama
+   - Verdict: EXCELLENT / GOOD / WEAK / AVOID
+   
+5. Destek/Direnç tablosu (yukarı dirençler → mevcut → aşağı destekler, golden ★)
+
+6. Dikkat edilecekler kartı
+
+7. Görüş değişir eğer kartı
+
+8. Aksiyon butonları:
    - 📋 Pozisyon Detaylarını Kopyala (clipboard'a)
-   - 📒 Journal'a Ekle (modal açar)
-   - 🔔 Alarm Kur
+   - 📒 Journal'a Ekle (modal açar — POZİSYON YARDIMCISI tetiklenir)
+   - 🔔 Alarm Kur (custom alarm modal'ı açar)
    - 🔍 Hesabı Göster
+
+src/components/dashboard/JournalAddModal.tsx (POZISYON YARDIMCISI):
+
+Pozisyon detaylarını gösterir + ALT KISIM:
+
+"🔔 Bu pozisyon için otomatik alarmlar yaratmak ister misin?"
+
+Checkbox listesi (default tüm seçili):
+☑ TP1 (3 aşamalı yaklaşma uyarısı)
+☑ TP2 (3 aşamalı yaklaşma uyarısı)
+☑ TP3 (3 aşamalı yaklaşma uyarısı)
+☑ SL (3 aşamalı yaklaşma uyarısı)
+
+"4 alarm otomatik yaratılacak."
+
+[Kaydet (4 alarmla)] [Sadece TP'ler (3 alarm)] [Alarmsız kaydet]
+
+Submit:
+- POST /api/v1/trades — pozisyon kaydedilir
+- POST /api/v1/user-alerts/from-trade/{trade_id} — auto alarmlar yaratılır
+- Toast: "Pozisyon kaydedildi, 4 alarm aktif"
 
 src/components/dashboard/CalculationModal.tsx:
 - Her hedef ve stop için arkadaki tüm confluence detayı
 - "TP1: 184.50 - neden?" açıklaması, indikatör listesi
+- **Confidence detayı:** Bu setup signature'ında geçmiş işlemler listesi
+- **Counter-trend detayı:** Hangi metrikler tetiklendi
+- **Trade quality detayı:** 5 faktör için ayrıntılı değerlendirme
 
-Tüm metrikler için ⓘ tooltip.
+Tüm metrikler için ⓘ tooltip:
+- "Olasılık nedir?"
+- "Confidence nedir? Olasılıktan farkı?"
+- "Counter-trend ne demek?"
+- "Trade Quality nasıl hesaplanır?"
 ```
+
+---
+
+### Adım 21B: Manual Alert System + /alerts Sayfası
+
+Bu adım, MVP'nin önemli bir parçası: kullanıcının elle yarattığı fiyat alarmları.
+
+```
+backend/app/services/alert_engine.py:
+
+class ApproachAlertEngine:
+    """3 aşamalı yaklaşma uyarısı motoru."""
+    
+    def compute_distances(self, symbol, target_price) -> dict:
+        atr_4h = get_atr(symbol, "4H")
+        return {
+            "approaching": atr_4h * 1.0,   # 1 ATR uzakta
+            "close": atr_4h * 0.5,         # 0.5 ATR uzakta
+            "target": 0
+        }
+    
+    def check_alert(self, alert, current_price) -> StageEvent | None:
+        # Stage 1: approaching (1 ATR)
+        # Stage 2: close (0.5 ATR)
+        # Stage 3: target_reached
+        ...
+
+backend/app/workers/alert_monitor.py (Celery):
+
+@celery_app.task
+def check_user_alerts():
+    """Her 30 saniyede çalışır."""
+    active = db.query(user_alerts).filter(status="active").all()
+    
+    # Toplu fiyat çek
+    symbols = set(a.symbol_id for a in active)
+    prices = batch_get_prices(symbols)
+    
+    for alert in active:
+        check_and_notify(alert, prices[alert.symbol_id])
+
+backend/app/api/v1/user_alerts.py:
+
+GET    /api/v1/user-alerts                       # liste
+GET    /api/v1/user-alerts/{id}                  # detay
+POST   /api/v1/user-alerts                       # yarat
+PATCH  /api/v1/user-alerts/{id}                  # düzenle
+DELETE /api/v1/user-alerts/{id}                  # sil
+POST   /api/v1/user-alerts/from-trade/{trade_id} # pozisyondan otomatik 4 alarm
+
+src/pages/Alerts.tsx (yeni sayfa):
+
+Layout:
+- Üstte: "Yeni Alarm" butonu (CreateAlertModal)
+- Filtre: Aktif / Tetiklenmiş / İptal
+- Tablo:
+  - Sembol (logo + isim)
+  - Tip (price_above / price_below / approach)
+  - Hedef fiyat
+  - Şu an fiyat (real-time)
+  - Mesafe (% ve ATR cinsinden)
+  - Durum (aktif / aşama 1 / aşama 2 / tetiklendi)
+  - Pozisyon bağlantısı (varsa)
+  - Aksiyonlar (düzenle / sil)
+- Filtre: sembol, tip, durum
+
+src/components/alerts/CreateAlertModal.tsx:
+
+Form:
+- Sembol (dropdown, ana semboller)
+- Hedef fiyat (sayı input — şu anki fiyatın üstü/altı önemli değil, sistem yön belirler)
+- Tip:
+  ◯ Sadece fiyat (basit, tek bildirim)
+  ◉ Yaklaşma uyarısı (3 aşamalı — önerilen)
+- Not (opsiyonel, "kırılırsa long açacağım" gibi)
+- Bildirim ayarları:
+  ☑ Telegram
+  ☑ Sesli (target ulaşınca)
+  ☑ Titreşimli (target ulaşınca)
+- "Yarat" butonu
+
+src/components/dashboard/QuickAlertButton.tsx:
+
+Dashboard'da Aksiyon Özeti içinde "🔔" butonu.
+Tıklandığında modal açar ama mevcut sembolü ön-doldurulmuş gelir.
+Kullanıcı sadece fiyat girer, "Yarat".
+5 saniyelik akış.
+
+Frontend:
+- Real-time fiyat güncellemesi (WebSocket)
+- Mesafe hesabı: (target - current) / atr_4h
+- "Aşama 2 (0.3 ATR uzakta)" gibi gösterim
+- Tetiklenmiş alarmlar farklı renk
+
+Test:
+- Approach engine: 3 aşama doğru tetikleniyor mu
+- Worker: çakışan alarmlar doğru sıralanıyor mu
+- Frontend: real-time fiyat akışı, modal akışı
+```
+
+---
 
 ---
 
@@ -761,7 +1193,9 @@ Faz 1 polish:
 
 ---
 
-## FAZ 2 — PROFESYONEL (3-4 hafta) — Adım 23-30
+## FAZ 2 — PROFESYONEL ÖZELLİKLER (3-4 hafta) — Adım 23-26
+
+**Bu fazın ilk yarısı MVP içinde** (Adım 23-26). Adım 27+ Future Roadmap.
 
 ### Adım 23: Coinglass Entegrasyonu
 
@@ -881,7 +1315,59 @@ Frontend:
 
 ---
 
-### Adım 27: Halving Sayacı + ETF Flow
+# 🛑 MVP CUT-OFF — ADIM 26 SONU
+
+**BURAYA KADAR BUILD ET. 3 AY CANLI KULLAN.**
+
+Adım 26 sonunda sistem **tam fonksiyonel**:
+- Multi-TF analiz (**15m**, 1H, 4H, 1D, 1W, 1M) — 6 timeframe
+- 2-katmanlı Confluence + Setup Quality A/B/C/D
+- **Confidence Engine** (kanıt seviyesi göstergesi)
+- **Counter-Trend Detector** (aldatıcı setup uyarısı)
+- **Trade Quality Filter** (vasat setup'ları otomatik ayıkla)
+- Macro entegrasyon + Korelasyon paneli
+- SMC (Order Block, FVG, Liquidity Sweep, BOS/CHoCH)
+- Aksiyon Özeti + "Hesabı Göster" modal
+- **Manual Alert System** (3 aşamalı yaklaşma + pozisyon yardımcısı)
+- Heatmap Dashboard + Sol Sembol Paneli
+- Risk yönetimi + No-trade zone + Tilt protection
+- News Feed (CryptoPanic)
+- Cross-Asset Rotation Tracker
+- Trade Journal temel + Telegram bildirimleri (basit)
+
+**Bu adımdan sonra ne yapılır:**
+
+1. **3 ay paper trade** — sistemin önerilerini takip et, kâğıda yaz
+2. **Hafta 4-12 küçük gerçek pozisyon** — risk %0.5-1
+3. **Hafta 12+ normal pozisyon** — risk %2 (default)
+4. **Trade Journal'ı manuel doldur** — pattern detection için
+5. **Notlar tut:** Hangi özelliği kullanmadın? Hangisi eksik geldi?
+6. **6 ay sonra** Future Roadmap'i değerlendir
+
+**6 ay sonra şu sorulara cevap ver:**
+- "Backtest motoru gerçekten lazım mı yoksa journal verisi yeterli mi?"
+- "Wyckoff phase tespitine ihtiyacım oldu mu?"
+- "AI asistan kullanır mıydım?"
+- "On-chain modülünü neden eklemedim?"
+- "Position management uyarıları işe yaradı mı?"
+
+Cevaplara göre **seçici** olarak ekle. **Hepsini ekleme**.
+
+---
+
+# 🔮 FUTURE ROADMAP — 6 AY SONRA DEĞERLENDİR
+
+⚠️ **Aşağıdaki adımlar şimdi build edilmeyecek.** 6 ay canlı kullanım sonrası **gerçek ihtiyaca göre** seçici olarak eklenecek.
+
+Her özellik için **ön-validasyon kriterleri** ekledim — eğer bu kriterler sağlanmıyorsa o özellik **eklenmemeli**.
+
+---
+
+## Future — Faz 2'nin Kalanı
+
+### Adım 27 (Future): Halving Sayacı + ETF Flow
+
+**Validasyon kriteri:** Macro Context Card'da bu metrikleri **manuel** takip ediyor musun? Düzenli kullanıyorsan ekle.
 
 ```
 backend/app/services/macro/halving.py:
@@ -900,7 +1386,9 @@ Frontend:
 
 ---
 
-### Adım 28: Otomatik Ekonomik Takvim
+### Adım 28 (Future): Otomatik Ekonomik Takvim
+
+**Validasyon kriteri:** Manuel girilen `major_events.json` dosyasını **güncel tutmaktan yoruldun mu?** Yoksa manuel yeterli.
 
 ```
 backend/app/services/macro/calendar.py:
@@ -917,9 +1405,6 @@ def sync_economic_calendar():
     # forexfactory'den 7 gün al
     # DB'ye yaz (economic_events)
 
-No-trade zone entegrasyonu (Adım 14'ün üstüne):
-- Real macro events DB'den
-
 Frontend:
 - Settings → "Yaklaşan Olaylar" listesi
 - Dashboard'da yakın olay (24h içinde) banner
@@ -927,80 +1412,49 @@ Frontend:
 
 ---
 
-### Adım 29: Scanner + Watchlist + Smart Alerts
+### Adım 29 (Future): Scanner Tam + Watchlist Yönetimi
+
+**Validasyon kriteri:** Heatmap zaten 25 sembolü gösteriyor. Ekstra watchlist yönetimine gerçekten ihtiyacın var mı? Kullanmıyorsan **atla**.
 
 ```
 backend/app/services/scanner.py:
-
 async def scan_watchlist(watchlist_id, min_quality, timeframes)
-    # Watchlist sembolleri
-    # Paralel run_analysis (max 5 paralel)
-    # A veya B kalite filtre
-    # Setup oluştur, DB'ye yaz
-    # Telegram alarm trigger
 
 backend/app/workers/scanner_tasks.py (Celery):
 - @celery_app.task scheduled_scan(user_id)
-- Beat schedule: kullanıcı interval'ine göre
-
-Volatility Alert worker:
-- Her dakika check
-- 5dk %2+, 1h %4+, 4h %7+ tespit
-- Tetiklenince anlık analiz çalıştır + bildirim
-
-Quick Signal:
-- 1H, 4H'de A/B kalite setup oluşunca
-- Format: CLAUDE.md'de spec
 
 Endpoints:
 - GET /api/v1/scanner/active-setups
 - POST /api/v1/scanner/run-now
 - /api/v1/watchlists/* CRUD
-
-Frontend:
-- src/pages/Scanner.tsx
-- Aktif setup listesi
-- Watchlist edit
-- Alarm geçmişi
 ```
 
 ---
 
-### Adım 30: Telegram Bot + Smart Priority
+### Adım 30 (Future): Telegram Bot İleri Komutlar
+
+**Validasyon kriteri:** Adım 25-26'da basit Telegram bildirim var. İleri komut (/btc, /scan, /pause) gerçekten kullanılıyor mu?
 
 ```
-backend/app/services/telegram_bot.py:
-
-python-telegram-bot kullan.
-
 Bot komutları:
-- /start (chat_id kayıt)
 - /status (açık pozisyon + günlük durum)
 - /scan (manuel tarama)
-- /pause
-- /resume
+- /pause / /resume
 - /btc, /eth, /sol vs (anlık özet)
 - /help
 
-backend/app/services/alert_manager.py:
-- create_alert(user_id, type, severity, ...)
-- Priority: kritik / yüksek / orta / düşük
-- Channel: telegram / in_app
-- Rate limit: aynı sembol+tip 30dk'da 1 kez, total dakikada 10
-
-Alert tipleri (architecture.md'deki tabloya göre).
-
-Endpoints:
-- POST /api/v1/settings/telegram-connect
-- POST /api/v1/alerts/test-telegram
-- GET /api/v1/alerts (geçmiş)
+Smart priority:
+- Critical / High / Medium / Low alert tipleri
+- Rate limit: aynı sembol+tip 30dk'da 1 kez
 ```
 
 ---
 
-## FAZ 3 — AKILLI (3 hafta) — Adım 31-37
+## Future — Faz 3 — Akıllı Öğrenme
 
-### Adım 31: Trade Journal Full
+### Adım 31 (Future): Trade Journal Full + Pattern Detection
+
+**Validasyon kriteri:** **EN ÖNEMLİ ADIM.** Trade Journal'ı 50+ işlemle doldurduktan sonra eklenmeli. **Mutlaka eklenecek**, sadece zamanı doğru olsun.
 
 ```
 src/pages/Journal.tsx
@@ -1031,7 +1485,7 @@ Endpoints: /api/v1/trades/* (CLAUDE.md'deki spec)
 
 ---
 
-### Adım 32: Position Monitoring + Management
+### Adım 32 (Future): Position Monitoring + Management
 
 ```
 backend/app/workers/trade_monitor.py (Celery):
@@ -1060,7 +1514,7 @@ Frontend:
 
 ---
 
-### Adım 33: Portfolio Manager
+### Adım 33 (Future): Portfolio Manager
 
 ```
 backend/app/services/portfolio.py:
@@ -1090,7 +1544,7 @@ Frontend:
 
 ---
 
-### Adım 34: Korelasyon + Sentiment Conflict Tam
+### Adım 34 (Future): Korelasyon + Sentiment Conflict Tam
 
 ```
 Adım 12'deki korelasyon engine'i derinleştir:
@@ -1112,7 +1566,7 @@ Yeni pozisyon açarken kontrol → uyarı.
 
 ---
 
-### Adım 35: Win Rate by Setup Type Detaylı
+### Adım 35 (Future): Win Rate by Setup Type Detaylı
 
 ```
 backend/app/services/journal_service.py'a eklemeler:
@@ -1137,7 +1591,7 @@ Frontend:
 
 ---
 
-### Adım 36: Basit On-Chain (Etherscan)
+### Adım 36 (Future): Basit On-Chain (Etherscan)
 
 ```
 backend/app/data/etherscan.py:
@@ -1163,7 +1617,7 @@ Frontend:
 
 ---
 
-### Adım 37: Faz 3 Polish + Deploy
+### Adım 37 (Future): Faz 3 Polish + Deploy
 
 ```
 - Tüm Faz 3 özellikleri Settings'e entegre
@@ -1175,9 +1629,15 @@ Frontend:
 
 ---
 
-## FAZ 4 — İLERİ (2-3 hafta) — Adım 38-43
+## Future — Faz 4 — İleri Özellikler
 
-### Adım 38: Backtest Engine
+⚠️ Bu adımlar **6 ay+ sonra**, ancak **gerçek ihtiyaç doğduğunda** eklenecek. Bazıları belki **hiç eklenmeyecek**.
+
+### Adım 38 (Future): Backtest Engine
+
+**Validasyon kriteri:** 100+ gerçek işlemden sonra Trade Journal verin **canlı edge'ini** sana zaten gösterecek. Backtest gerçekten **fazlalık** olabilir. Yine de istersen ekle.
+
+**⚠️ Önemli uyarı:** Backtest'te %75 win rate çıkarsa, canlıda %50-58 olacak (overfitting + slippage + psikoloji). **İnanma**.
 
 ```
 backend/app/services/backtest/:
@@ -1220,7 +1680,11 @@ Frontend:
 
 ---
 
-### Adım 39: Wyckoff Schematics
+### Adım 39 (Future — OPSİYONEL): Wyckoff Schematics
+
+**⚠️ Validasyon kriteri:** Wyckoff phase otomatik tespit etmek **algoritmik olarak çok zor**, false positive riski yüksek. **Manuel olarak grafiğe bakıp Wyckoff yorumu yapmak daha doğru olabilir.** Eklemeden önce dürüst sor: "Bu özelliği gerçekten kullanır mıyım?"
+
+**Önerilen alternatif:** Wyckoff manuel öğren (kitap + YouTube), grafiğe bakarken kafanda uygula. Sistem'e entegre etme.
 
 ```
 backend/app/services/indicators/wyckoff.py:
@@ -1248,7 +1712,9 @@ Frontend:
 
 ---
 
-### Adım 40: AI Assistant (Claude API)
+### Adım 40 (Future): AI Assistant (Claude API)
+
+**Validasyon kriteri:** İlk 6 ayda **gerçekten** sisteme bir şey sormak istediğin oldu mu? "BTC niye düştü?" gibi sorular için ChatGPT/Claude.ai zaten yeterli. Entegrasyon gereksiz olabilir. **Sadece çok fayda sağlıyorsa ekle.**
 
 ```
 backend/app/services/ai_assistant.py:
@@ -1281,7 +1747,7 @@ Maliyet: kullanıcının API key'ini kendi girmesi (Anthropic Console'dan).
 
 ---
 
-### Adım 41: Mobile PWA
+### Adım 41 (Future): Mobile PWA
 
 ```
 1. PWA setup:
@@ -1302,7 +1768,7 @@ Maliyet: kullanıcının API key'ini kendi girmesi (Anthropic Console'dan).
 
 ---
 
-### Adım 42: Setup Type Stats + Pattern Insights
+### Adım 42 (Future): Setup Type Stats + Pattern Insights
 
 ```
 Adım 35'te başladık, derinleştir:
@@ -1319,7 +1785,7 @@ Frontend:
 
 ---
 
-### Adım 43: Final Polish + Production v1.0
+### Adım 43 (Future): Final Polish + Production v1.0
 
 ```
 1. Cross-browser test (Chrome, Safari, Firefox)

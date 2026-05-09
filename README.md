@@ -6,9 +6,9 @@
 
 ---
 
-## Genel Bakış
+## Temel Bakış
 
-MarketLens, 25 sembol (BTC, ETH, SOL, BNB, ve major + Tier 1-4 altcoinler + GOLD) üzerinde multi-timeframe (1H, 4H, 1D, 1W, 1M) teknik + macro + on-chain + Smart Money Concepts analiz yapar.
+MarketLens, 25 sembol (BTC, ETH, SOL, BNB, ve major + Tier 1-4 altcoinler + GOLD) üzerinde multi-timeframe (15m, 1H, 4H, 1D, 1W, 1M) teknik + macro + on-chain + Smart Money Concepts analiz yapar.
 
 Her analiz şu çıktıları üretir:
 - **2-katmanlı Confluence skoru** (lokal + macro)
@@ -16,6 +16,17 @@ Her analiz şu çıktıları üretir:
 - **Long ve Short senaryoları** (giriş, hedefler, stop)
 - **Risk yönetimi planı** (pozisyon boyutu, kaldıraç, margin)
 - **Aksiyon Özeti** (kopyala-yapıştır pozisyon detayları + destek/direnç tablosu + uyarılar)
+
+### 🛡️ Önemli — Manuel İşlem
+
+**MarketLens borsaya otomatik emir göndermez.** Sadece analiz ve öneri verir. Tüm işlemleri kullanıcı **kendisi manuel olarak** Binance üzerinden açar/kapatır. Bu mimari karar:
+
+- Sistem hacker'lansa bile borsa hesabı güvende kalır (trading API izni gerekmez)
+- Yasal/regülatif gri alanlar yoktur
+- Trader olarak gelişimi destekler — her pozisyon bilinçli karardır
+- Otomatik bot riskleri (gece istenmeyen trade, vb.) yoktur
+
+Sistem bir **karar destek aracıdır**, otomatik ticaret botu değildir.
 
 ---
 

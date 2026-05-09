@@ -65,6 +65,20 @@ CREATE TABLE analyses (
     setup_quality   CHAR(1),                        -- A/B/C/D
     setup_score     NUMERIC(5, 2),
     
+    -- Confidence (MVP)
+    confidence_level    VARCHAR(20),                -- VERY_LOW, LOW, MEDIUM, HIGH, VERY_HIGH
+    confidence_trade_count INTEGER,                 -- benzer setup'taki işlem sayısı
+    actual_win_rate NUMERIC(5, 2),                  -- bu setup tipindeki gerçek win rate (varsa)
+    
+    -- Counter-trend (MVP)
+    counter_trend_warnings_count INTEGER DEFAULT 0,
+    counter_trend_data JSONB,                       -- detaylı uyarılar
+    
+    -- Trade Quality Filter (MVP)
+    trade_quality_score INTEGER,                    -- 0-5
+    trade_quality_verdict VARCHAR(20),              -- AVOID/WEAK/GOOD/EXCELLENT
+    trade_quality_factors JSONB,                    -- 5 faktör detayı
+    
     -- Macro context
     macro_regime    VARCHAR(30),                    -- "ALT_BULL", "BTC_BULL", "RISK_OFF", etc.
     macro_modifier  NUMERIC(5, 2),                  -- -25 to +25
@@ -289,6 +303,76 @@ CREATE TABLE alerts (
 CREATE INDEX idx_alerts_user_undelivered ON alerts(user_id, delivered, created_at DESC);
 CREATE INDEX idx_alerts_priority ON alerts(priority, created_at DESC);
 ```
+
+---
+
+## user_alerts (Manuel Alarm Sistemi — MVP)
+
+Kullanıcının elle yarattığı fiyat alarmları. Yukarıdaki `alerts` tablosundan farklı:
+- `alerts` = sistem otomatik üretir (setup_found, volatility_alert vb.)
+- `user_alerts` = kullanıcı manuel yaratır, izlenir, tetiklenir
+
+```sql
+CREATE TABLE user_alerts (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
+    symbol_id       INTEGER REFERENCES symbols(id),
+    
+    -- Alarm konfigürasyonu
+    alert_type      VARCHAR(20) NOT NULL,           -- "price_above", "price_below", "approach"
+    target_price    NUMERIC(20, 8) NOT NULL,        -- hedef fiyat seviyesi
+    note            VARCHAR(255),                   -- "kırılırsa long açacağım" gibi
+    
+    -- Yaklaşma uyarısı (3 aşamalı)
+    -- Sistem ATR'ye göre otomatik hesaplar:
+    -- approaching_distance = 1.0 * ATR_4H
+    -- close_distance = 0.5 * ATR_4H
+    enable_approach_warning BOOLEAN DEFAULT true,   -- 3 aşamalı uyarı aktif mi?
+    
+    -- Aşama tetiklenme durumu
+    approaching_triggered BOOLEAN DEFAULT false,    -- "yaklaşıyor" tetiklendi mi (1 ATR)
+    close_triggered     BOOLEAN DEFAULT false,      -- "çok yakın" tetiklendi mi (0.5 ATR)
+    target_triggered    BOOLEAN DEFAULT false,      -- "ulaştı" tetiklendi mi
+    
+    -- Tetiklenme zamanları
+    approaching_triggered_at TIMESTAMPTZ,
+    close_triggered_at  TIMESTAMPTZ,
+    target_triggered_at TIMESTAMPTZ,
+    
+    -- Durum
+    status          VARCHAR(20) DEFAULT 'active',   -- "active", "triggered", "expired", "cancelled"
+    is_repeating    BOOLEAN DEFAULT false,          -- tek seferlik mi tekrarlı mı
+    
+    -- Pozisyon ile bağlantı (otomatik yaratıldıysa)
+    related_trade_id UUID REFERENCES trades(id),    -- TP/SL alarmı için
+    auto_generated  BOOLEAN DEFAULT false,          -- pozisyondan otomatik mi yaratıldı
+    target_role     VARCHAR(20),                    -- "tp1", "tp2", "tp3", "sl" (auto için)
+    
+    -- Bildirim ayarları
+    notify_telegram BOOLEAN DEFAULT true,
+    notify_sound    BOOLEAN DEFAULT true,           -- ulaştığında sesli bildirim
+    notify_vibrate  BOOLEAN DEFAULT true,
+    
+    -- Zaman
+    expires_at      TIMESTAMPTZ,                    -- isteğe bağlı son tarih
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_user_alerts_active ON user_alerts(user_id, status) WHERE status = 'active';
+CREATE INDEX idx_user_alerts_symbol ON user_alerts(symbol_id, status) WHERE status = 'active';
+CREATE INDEX idx_user_alerts_trade ON user_alerts(related_trade_id) WHERE related_trade_id IS NOT NULL;
+```
+
+**Alarm tipi davranışları:**
+
+| Tip | Davranış |
+|-----|----------|
+| `price_above` | Fiyat target_price üstüne çıkarsa tetiklenir |
+| `price_below` | Fiyat target_price altına inerse tetiklenir |
+| `approach` | 3 aşamalı: yaklaşıyor (1 ATR) → çok yakın (0.5 ATR) → ulaştı |
+
+**Yön tespiti:** `approach` alarmlarında sistem mevcut fiyatı vs target_price karşılaştırarak yönü kendi belirler.
 
 ---
 
