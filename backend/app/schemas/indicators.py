@@ -246,19 +246,72 @@ class LevelsResult(_Strict):
     resistances: list[LevelEntry]
 
 
+# ─── Futures ───
+
+
+class FundingAnalysisResult(_Strict):
+    current_rate: float = Field(..., description="En yeni funding ödemesi (oran, ondalık)")
+    avg_24h: float = Field(..., description="Son 3 funding ortalaması")
+    avg_7d: float = Field(..., description="Son 21 funding ortalaması")
+    extreme: bool = Field(..., description="|current_rate| > 0.0008 (%0.08) → squeeze riski")
+    next_funding_time: int = Field(..., description="Sonraki ödeme zaman damgası (ms)")
+
+
+class OIChangeResult(_Strict):
+    current: float = Field(..., description="Anlık open interest (asset birimi)")
+    change_1h_pct: float
+    change_4h_pct: float
+    change_24h_pct: float
+
+
+class LongShortAnomalyResult(_Strict):
+    ratio: float = Field(..., description="Long/Short hesap oranı (top traders)")
+    long_account: float = Field(..., description="Long hesap yüzdesi (0-1)")
+    short_account: float = Field(..., description="Short hesap yüzdesi (0-1)")
+    extreme: bool = Field(..., description="ratio > 3.0 veya < 0.33 → kalabalık")
+    period: str
+
+
+class FuturesIndicators(_Strict):
+    funding: FundingAnalysisResult
+    open_interest: OIChangeResult
+    long_short: LongShortAnomalyResult
+
+
 # ─── Bundle ───
 
 
+# Module selector için izin verilen modül adları
+ModuleName = Literal[
+    "trend",
+    "momentum",
+    "volatility",
+    "volume",
+    "fibonacci",
+    "levels",
+    "futures",
+]
+
+
 class IndicatorBundle(_Strict):
+    """Tüm modüller dahil bundle.
+
+    Module selector kullanıldığında seçilmeyen modüller None döner.
+    fibonacci ve futures her zaman opsiyonel (data yetersizliği / has_futures=False).
+    """
+
     symbol: str
     timeframe: str
     computed_at: datetime
     kline_count: int
-    trend: TrendIndicators
-    momentum: MomentumIndicators
-    volatility: VolatilityIndicators
-    volume: VolumeIndicators
+    trend: TrendIndicators | None = None
+    momentum: MomentumIndicators | None = None
+    volatility: VolatilityIndicators | None = None
+    volume: VolumeIndicators | None = None
     fibonacci: FibonacciResult | None = Field(
         None, description="Major swing tespit edilemezse None"
     )
-    levels: LevelsResult
+    levels: LevelsResult | None = None
+    futures: FuturesIndicators | None = Field(
+        None, description="has_futures=False ise None (örn. GOLD)"
+    )

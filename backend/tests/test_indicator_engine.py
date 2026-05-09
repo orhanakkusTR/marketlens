@@ -64,3 +64,17 @@ async def test_compute_levels_with_external_klines() -> None:
     result = await indicator_engine.compute_levels("BTCUSDT", "4H", klines=klines)
     assert len(result.supports) <= 5
     assert len(result.resistances) <= 5
+
+
+# ─── Module selector ───
+
+
+async def test_compute_all_unknown_module_raises() -> None:
+    with pytest.raises(ValueError, match="Bilinmeyen modüller"):
+        await indicator_engine.compute_all("BTCUSDT", "4H", modules=["foo"])  # type: ignore[list-item]
+
+
+async def test_compute_futures_returns_none_for_non_futures_symbol() -> None:
+    # GOLD has_futures=False → None
+    result = await indicator_engine.compute_futures("GOLD")
+    assert result is None

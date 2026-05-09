@@ -48,6 +48,16 @@ class DataService:
     ) -> list[dict[str, Any]]:
         return await self.binance_futures.get_long_short_ratio(symbol, period)
 
+    async def get_funding_history(
+        self, symbol: str, limit: int = 24
+    ) -> list[dict[str, Any]]:
+        return await self.binance_futures.get_funding_history(symbol, limit)
+
+    async def get_oi_history(
+        self, symbol: str, period: str = "5m", limit: int = 300
+    ) -> list[dict[str, Any]]:
+        return await self.binance_futures.get_oi_history(symbol, period, limit)
+
     # ─── Order Book ───
     async def get_orderbook(self, symbol: str, limit: int = 1000) -> dict[str, Any]:
         return await self.binance_depth.get_orderbook(symbol, limit)

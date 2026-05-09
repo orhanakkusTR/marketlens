@@ -82,3 +82,58 @@ class BinanceFuturesClient(AbstractDataClient):
             }
             for item in response.json()
         ]
+
+    async def get_funding_history(
+        self, symbol: str, limit: int = 24
+    ) -> list[dict[str, Any]]:
+        """Geçmiş funding ödemeleri (1 ödeme/8h). 24 = ~8 gün."""
+        return await cached_call(
+            key=f"binance:funding_hist:{symbol}:{limit}",
+            ttl=300,  # 5dk
+            fetch_fn=lambda: self._fetch_funding_history(symbol, limit),
+        )
+
+    async def _fetch_funding_history(
+        self, symbol: str, limit: int
+    ) -> list[dict[str, Any]]:
+        response = await self.request(
+            "GET",
+            "/fapi/v1/fundingRate",
+            params={"symbol": symbol, "limit": limit},
+        )
+        return [
+            {
+                "symbol": item["symbol"],
+                "funding_rate": float(item["fundingRate"]),
+                "funding_time": item["fundingTime"],
+            }
+            for item in response.json()
+        ]
+
+    async def get_oi_history(
+        self, symbol: str, period: str = "5m", limit: int = 300
+    ) -> list[dict[str, Any]]:
+        """Open Interest geçmişi. period: 5m/15m/30m/1h/2h/4h/6h/12h/1d."""
+        return await cached_call(
+            key=f"binance:oi_hist:{symbol}:{period}:{limit}",
+            ttl=300,
+            fetch_fn=lambda: self._fetch_oi_history(symbol, period, limit),
+        )
+
+    async def _fetch_oi_history(
+        self, symbol: str, period: str, limit: int
+    ) -> list[dict[str, Any]]:
+        response = await self.request(
+            "GET",
+            "/futures/data/openInterestHist",
+            params={"symbol": symbol, "period": period, "limit": limit},
+        )
+        return [
+            {
+                "symbol": item["symbol"],
+                "open_interest": float(item["sumOpenInterest"]),
+                "open_interest_value": float(item["sumOpenInterestValue"]),
+                "timestamp": item["timestamp"],
+            }
+            for item in response.json()
+        ]

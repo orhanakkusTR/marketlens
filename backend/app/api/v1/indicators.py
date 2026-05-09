@@ -1,13 +1,15 @@
 """Indicator endpoints.
 
-GET /api/v1/indicators/{symbol}/{timeframe} → IndicatorBundle (full)
+GET /api/v1/indicators/{symbol}/{timeframe}?modules=trend,momentum → IndicatorBundle
 GET /api/v1/levels/{symbol}/{timeframe}     → LevelsResult + Fibonacci
 
 Auth: bu adımda public (slowapi rate limit aktif).
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Path, Request
+from typing import cast
+
+from fastapi import APIRouter, Path, Query, Request
 from pydantic import BaseModel, ConfigDict
 
 from app.core.exceptions import NotFoundError, ValidationError
@@ -17,8 +19,9 @@ from app.schemas.indicators import (
     FibonacciResult,
     IndicatorBundle,
     LevelsResult,
+    ModuleName,
 )
-from app.services.indicators.engine import indicator_engine
+from app.services.indicators.engine import ALL_MODULES, indicator_engine
 
 router = APIRouter(tags=["indicators"])
 
@@ -63,15 +66,34 @@ async def get_indicators(
     request: Request,
     symbol: str = Path(..., min_length=3, max_length=20),
     timeframe: str = Path(..., min_length=2, max_length=4),
+    modules: str | None = Query(
+        None,
+        description=(
+            "Virgülle ayrılmış modül listesi (örn. 'trend,momentum,futures'). "
+            f"Boş bırakılırsa hepsi. İzin verilen: {', '.join(ALL_MODULES)}"
+        ),
+    ),
 ) -> IndicatorBundle:
-    """Bir sembol+TF için tüm indikatörleri hesapla (trend + momentum + volatility +
-    volume + fibonacci + levels).
+    """Bir sembol+TF için indikatör bundle'ı.
 
-    Cache: TF'ye göre kline TTL'i (15m=60s, 1H=180s, 4H=600s, 1D=1800s, ...).
-    Rate limit: 30 istek/dakika/IP.
+    - Tüm modüller: `?modules` boş veya hiç gönderme
+    - Seçili modüller: `?modules=trend,momentum,futures`
+    - Module bazlı cache + bundle compose: seçim performansı azaltmaz
     """
     symbol_upper = _validate(symbol, timeframe)
-    return await indicator_engine.compute_all(symbol_upper, timeframe)
+
+    selected: list[ModuleName] | None = None
+    if modules is not None:
+        raw = [m.strip() for m in modules.split(",") if m.strip()]
+        invalid = [m for m in raw if m not in ALL_MODULES]
+        if invalid:
+            raise ValidationError(
+                f"Geçersiz modül(ler): {', '.join(invalid)}",
+                details={"valid": list(ALL_MODULES)},
+            )
+        selected = cast("list[ModuleName]", raw)
+
+    return await indicator_engine.compute_all(symbol_upper, timeframe, modules=selected)
 
 
 @router.get("/levels/{symbol}/{timeframe}", response_model=LevelsBundle)

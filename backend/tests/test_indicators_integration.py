@@ -96,6 +96,86 @@ async def test_levels_endpoint_includes_round_numbers(client) -> None:  # type: 
     assert has_round, f"Hiç round number tespit edilmedi: {all_sources}"
 
 
+# ─── Step 8: Futures + Module Selector ───
+
+
+async def test_futures_btc_real() -> None:
+    """BTC futures snapshot — funding/OI/L-S real data."""
+    from app.services.indicators.engine import indicator_engine
+
+    fut = await indicator_engine.compute_futures("BTCUSDT")
+    assert fut is not None
+    # Funding makul aralık
+    assert -0.01 < fut.funding.current_rate < 0.01
+    assert isinstance(fut.funding.extreme, bool)
+    # OI pozitif
+    assert fut.open_interest.current > 0
+    # L/S oranı pozitif
+    assert fut.long_short.ratio > 0
+    assert 0 < fut.long_short.long_account < 1
+    assert 0 < fut.long_short.short_account < 1
+    # period field
+    assert fut.long_short.period == "1h"
+
+
+async def test_indicators_endpoint_with_modules_selector(client) -> None:  # type: ignore[no-untyped-def]
+    """?modules=trend,futures → sadece trend ve futures dolu."""
+    r = await client.get("/api/v1/indicators/BTCUSDT/4H?modules=trend,futures")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["trend"] is not None
+    assert body["futures"] is not None
+    # Diğerleri None
+    assert body["momentum"] is None
+    assert body["volatility"] is None
+    assert body["volume"] is None
+    assert body["fibonacci"] is None
+    assert body["levels"] is None
+
+
+async def test_indicators_endpoint_invalid_module(client) -> None:  # type: ignore[no-untyped-def]
+    r = await client.get("/api/v1/indicators/BTCUSDT/4H?modules=foo,bar")
+    assert r.status_code == 422
+    body = r.json()
+    assert body["error"] == "validation_error"
+
+
+async def test_indicators_endpoint_full_includes_futures(client) -> None:  # type: ignore[no-untyped-def]
+    """Modules belirtilmeden full bundle → futures dolu olmalı (BTC)."""
+    r = await client.get("/api/v1/indicators/BTCUSDT/4H")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["futures"] is not None
+    assert "funding" in body["futures"]
+    assert "open_interest" in body["futures"]
+    assert "long_short" in body["futures"]
+
+
+async def test_futures_cache_hit_under_50ms() -> None:
+    """compute_futures 2. çağrı cache'ten <50ms."""
+    import time
+
+    from app.core.redis_client import redis_client
+    from app.services.indicators.engine import indicator_engine
+
+    async for k in redis_client.scan_iter(match="marketlens:indicators:ETHUSDT:futures"):
+        await redis_client.delete(k)
+
+    t0 = time.perf_counter()
+    await indicator_engine.compute_futures("ETHUSDT")
+    first = (time.perf_counter() - t0) * 1000
+
+    t0 = time.perf_counter()
+    await indicator_engine.compute_futures("ETHUSDT")
+    second = (time.perf_counter() - t0) * 1000
+
+    print(f"\n  1st (miss): {first:.1f}ms")
+    print(f"  2nd (hit):  {second:.1f}ms")
+
+    assert second < 50, f"2. çağrı {second:.1f}ms"
+    assert second * 10 < first, f"Speedup yetersiz: 1st={first:.1f}ms, 2nd={second:.1f}ms"
+
+
 async def test_indicators_endpoint_real(client) -> None:  # type: ignore[no-untyped-def]
     """HTTP endpoint çalışmalı — schema valid."""
     r = await client.get("/api/v1/indicators/BTCUSDT/4H")
