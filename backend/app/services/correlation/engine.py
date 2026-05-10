@@ -71,13 +71,6 @@ async def _fetch_crypto_closes(symbol: str, days: int) -> list[tuple[int, float]
     return [(int(k["close_time"]), float(k["close"])) for k in klines]
 
 
-async def _fetch_gold_closes(days: int) -> list[tuple[int, float]]:
-    """yfinance get_history → (ts_ms, close)."""
-    period = f"{days + 5}d"
-    history = await data_service.get_yfinance_history("GOLD", period=period, interval="1d")
-    return yfinance_history_to_series(history)
-
-
 async def _fetch_tradfi_closes(symbol: str, days: int) -> list[tuple[int, float]]:
     period = f"{days + 5}d"
     history = await data_service.get_yfinance_history(symbol, period=period, interval="1d")
@@ -85,12 +78,14 @@ async def _fetch_tradfi_closes(symbol: str, days: int) -> list[tuple[int, float]
 
 
 async def _fetch_series(symbol: str, days: int) -> list[tuple[int, float]]:
-    """Generic price series fetcher (cripto/GOLD/tradfi)."""
-    if symbol == "GOLD":
-        return await _fetch_gold_closes(days)
+    """Generic price series fetcher (Binance crypto + XAUUSDT / yfinance tradfi).
+
+    XAUUSDT artık Binance TradFi Perpetual'da; eski yfinance "GOLD" route'u
+    macro snapshot için korunuyor (macro/context.py).
+    """
     if symbol in TRADFI_REFS:
         return await _fetch_tradfi_closes(symbol, days)
-    # Crypto
+    # Crypto + XAUUSDT (Binance)
     return await _fetch_crypto_closes(symbol, days)
 
 

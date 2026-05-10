@@ -28,11 +28,11 @@ def _clamp(v: float, lo: float, hi: float) -> float:
 
 
 def symbol_type(symbol: str) -> SymbolType:
-    """26 USDT crypto + GOLD spec'i."""
+    """26 USDT crypto + XAUUSDT (commodity) spec'i."""
     s = symbol.upper()
     if s == "BTCUSDT":
         return "btc"
-    if s == "GOLD":
+    if s == "XAUUSDT":
         return "commodity"
     return "alt"
 

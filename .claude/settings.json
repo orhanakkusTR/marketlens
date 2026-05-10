@@ -49,7 +49,13 @@
       "Bash(curl -s \"http://localhost:8000/api/v1/analysis/full/BTCUSDT/4H\")",
       "Bash(curl -s \"http://localhost:8000/api/v1/analysis/full/ETHUSDT/4H\")",
       "Bash(curl -s -o /tmp/gold.json -w \"HTTP %{http_code}\\\\n\" \"http://localhost:8000/api/v1/analysis/full/GOLD/4H\")",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(curl -s \"http://localhost:8000/api/v1/analysis/full/XAUUSDT/4H\")",
+      "Bash(curl -s \"http://localhost:8000/api/v1/analysis/full/XAUUSDT/1H\")",
+      "Bash(curl -s -o /dev/null -w \"BTC 4H: HTTP %{http_code}\\\\n\" \"http://localhost:8000/api/v1/analysis/full/BTCUSDT/4H\")",
+      "Bash(curl -s -o /dev/null -w \"XAUUSDT 4H: HTTP %{http_code}\\\\n\" \"http://localhost:8000/api/v1/analysis/full/XAUUSDT/4H\")",
+      "Bash(curl -s \"http://localhost:8000/api/v1/macro/snapshot\")",
+      "Bash(curl -s \"http://localhost:8000/api/v1/correlations/BTCUSDT\")"
     ]
   }
 }

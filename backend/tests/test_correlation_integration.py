@@ -44,13 +44,13 @@ async def test_btc_top_correlations_dominated_by_majors() -> None:
     assert len(overlap) >= 3, f"BTC top5 majors içermiyor: {top5_symbols}"
 
 
-async def test_btc_vs_gold_decoupled() -> None:
-    """BTC ile GOLD genelde decoupled veya zayıf (|r| < 0.5)."""
+async def test_btc_vs_xauusdt_decoupled() -> None:
+    """BTC ile XAUUSDT (commodity) genelde decoupled veya zayıf (|r| < 0.5)."""
     btc = await correlation_engine.get_symbol_correlations("BTCUSDT")
-    # GOLD pair'ini ara
-    gold_pair = next((p for p in btc.all if p.symbol == "GOLD"), None)
-    assert gold_pair is not None
-    assert abs(gold_pair.coefficient) < 0.5
+    # XAUUSDT pair'ini ara
+    xau_pair = next((p for p in btc.all if p.symbol == "XAUUSDT"), None)
+    assert xau_pair is not None
+    assert abs(xau_pair.coefficient) < 0.5
 
 
 async def test_btc_vs_dxy_negative_correlation() -> None:

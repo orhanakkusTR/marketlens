@@ -32,7 +32,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.cache import cached_call
 from app.core.logging import get_logger
 from app.data.binance_spot import TF_TO_INTERVAL
-from app.data.symbols_meta import sector_of
 from app.db.session import AsyncSessionLocal
 from app.schemas.analysis import (
     AnalysisFullResult,
@@ -105,10 +104,11 @@ async def _safe_macro() -> MacroSnapshot:
 
 
 async def _safe_correlations(symbol: str) -> SymbolCorrelations:
-    """GOLD veya tek-sembol failure → ValueError'e dökülür, üst kat None'a çevirir."""
-    if sector_of(symbol) == "Commodity":
-        # GOLD için tek-sembol correlations view şu an matrix'ten dahil değil
-        raise ValueError("Commodity için sembol-bazlı korelasyon view desteklenmiyor")
+    """Tüm 27 sembol için correlation matrix'ten tek-sembol view.
+
+    Ocak 2026 sonrası: XAUUSDT artık Binance kline'da → diğer sembollerle
+    aynı pipeline'da. Eski "Commodity için sessiz None" mantığı kaldırıldı.
+    """
     return await correlation_engine.get_symbol_correlations(symbol)
 
 
@@ -274,9 +274,7 @@ class AnalysisOrchestrator:
                     name="correlations", ok=False, error=str(corr_result)
                 )
             )
-            # GOLD için bu beklenen — warning vermeyelim
-            if sector_of(symbol) != "Commodity":
-                warnings.append("Korelasyon verisi alınamadı.")
+            warnings.append("Korelasyon verisi alınamadı.")
             logger.warning("phase2_correlations_failed", error=str(corr_result))
         else:
             correlations = corr_result

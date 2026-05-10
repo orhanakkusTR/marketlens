@@ -67,8 +67,8 @@ def test_final_alt_with_regime_modifier() -> None:
     assert result.final_score > 50
 
 
-def test_final_gold_only_dxy_vix() -> None:
-    local = _local("GOLD", score=30)
+def test_final_commodity_only_dxy_vix() -> None:
+    local = _local("XAUUSDT", score=30)
     snap = _snapshot(dxy_7d=-3.0, vix_level=22.0)
     result = compute_final_confluence(local, snap)
     assert result.symbol_type == "commodity"

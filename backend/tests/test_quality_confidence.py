@@ -62,16 +62,16 @@ def test_category_filter_btc_only() -> None:
 
 def test_category_filter_commodity_only() -> None:
     codes = _category_to_sql_filter("commodity")
-    assert codes == ["GOLD"]
+    assert codes == ["XAUUSDT"]
 
 
-def test_category_filter_alt_excludes_btc_and_gold() -> None:
+def test_category_filter_alt_excludes_btc_and_commodity() -> None:
     codes = _category_to_sql_filter("alt")
     assert "BTCUSDT" not in codes
-    assert "GOLD" not in codes
+    assert "XAUUSDT" not in codes
     assert "ETHUSDT" in codes
     assert "SOLUSDT" in codes
-    # 26 USDT - 1 BTC = 25 sembol
+    # 27 toplam - BTC - XAUUSDT = 25 sembol
     assert len(codes) == 25
 
 

@@ -81,8 +81,9 @@ def test_symbol_type_btc() -> None:
     assert symbol_type("btcusdt") == "btc"
 
 
-def test_symbol_type_gold() -> None:
-    assert symbol_type("GOLD") == "commodity"
+def test_symbol_type_commodity() -> None:
+    assert symbol_type("XAUUSDT") == "commodity"
+    assert symbol_type("xauusdt") == "commodity"
 
 
 def test_symbol_type_altcoins() -> None:
@@ -212,7 +213,7 @@ def test_alt_modifier_total3_is_none() -> None:
 def test_gold_modifier_dxy_strong_negative() -> None:
     """DXY -3% → GOLD için +9 (3.0 çarpan)."""
     snap = _snapshot(dxy_7d=-3.0)
-    total, br = compute_macro_modifier("GOLD", snap)
+    total, br = compute_macro_modifier("XAUUSDT", snap)
     assert br.dxy == pytest.approx(9.0)
     assert br.eth_btc is None
     assert br.sp500 is None
@@ -222,27 +223,27 @@ def test_gold_modifier_dxy_strong_negative() -> None:
 def test_gold_modifier_vix_safe_haven() -> None:
     """VIX >30 → GOLD için +10 (safe haven demand)."""
     snap = _snapshot(vix_level=35.0)
-    _, br = compute_macro_modifier("GOLD", snap)
+    _, br = compute_macro_modifier("XAUUSDT", snap)
     assert br.vix == 10.0
 
 
 def test_gold_modifier_low_vix_risk_on_negative() -> None:
     """VIX <15 → GOLD için -5 (kimse safe haven istemiyor)."""
     snap = _snapshot(vix_level=10.0)
-    _, br = compute_macro_modifier("GOLD", snap)
+    _, br = compute_macro_modifier("XAUUSDT", snap)
     assert br.vix == -5.0
 
 
 def test_gold_modifier_vix_mid_range() -> None:
     snap = _snapshot(vix_level=20.0)
-    _, br = compute_macro_modifier("GOLD", snap)
+    _, br = compute_macro_modifier("XAUUSDT", snap)
     assert br.vix == 0.0
 
 
 def test_gold_modifier_no_crypto_signals() -> None:
     """GOLD'un modifier'ı sadece DXY + VIX'e duyarlı."""
     snap = _snapshot(eth_btc_7d=10.0, sp500_7d=10.0, regime="ALT_BULL")
-    total, br = compute_macro_modifier("GOLD", snap)
+    total, br = compute_macro_modifier("XAUUSDT", snap)
     # Sadece dxy=0 + vix=0 katkı → total = 0
     assert br.eth_btc is None
     assert br.sp500 is None

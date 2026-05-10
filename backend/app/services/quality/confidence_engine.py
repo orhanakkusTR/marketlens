@@ -38,7 +38,7 @@ def _category_to_sql_filter(symbol_category: SymbolType) -> list[str]:
     if symbol_category == "btc":
         return ["BTCUSDT"]
     if symbol_category == "commodity":
-        return ["GOLD"]
+        return ["XAUUSDT"]
     # alt
     from app.data.symbols_meta import ALL_SYMBOLS
 

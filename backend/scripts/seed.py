@@ -1,4 +1,4 @@
-"""Sembol seed scripti — 27 sembol (26 kripto + GOLD).
+"""Sembol seed scripti — 27 sembol (26 kripto + XAUUSDT/Commodity).
 
 Idempotent: var olan sembolleri tekrar eklemez (code unique).
 
@@ -73,16 +73,16 @@ SYMBOLS: list[SymbolSeed] = [
     {"code": "SUIUSDT",  "display_name": "Sui",       "sector": Sector.L1.value,    "sort_order": 25},
     {"code": "SEIUSDT",  "display_name": "Sei",       "sector": Sector.L1.value,    "sort_order": 26},
 
-    # ─── Emtia (1) ───
+    # ─── Emtia (1) — Binance TradFi Perpetual (Ocak 2026) ───
     {
-        "code": "XAUUSD",
+        "code": "XAUUSDT",
         "display_name": "Gold",
         "sector": Sector.COMMODITY.value,
         "sort_order": 27,
         "asset_type": AssetType.COMMODITY.value,
-        "quote_currency": "USD",
-        "exchange": "yfinance",
-        "has_futures": False,
+        "quote_currency": "USDT",
+        "exchange": "binance",
+        "has_futures": True,
     },
 ]
 

@@ -80,15 +80,17 @@ async def test_correlations_fail_graceful_degradation() -> None:
 
 
 @pytest.mark.integration
-async def test_gold_correlations_silent_no_warning() -> None:
-    """GOLD için correlations=None bekleniyor, warning eklenmemeli."""
-    # GOLD direkt _safe_correlations'ı raise eder (Commodity check)
-    # Bunu integration olarak çalıştırırsak _safe_setup_quality vs vs gerçek çalışır
-    # Daha hafif: sadece correlations behavior'ı kontrol
+async def test_xauusdt_correlations_via_binance() -> None:
+    """XAUUSDT artık Binance kline'da → correlations çalışmalı, hata vermemeli.
+
+    Ocak 2026: TradFi Perpetual; eski Commodity-silent davranışı kaldırıldı.
+    """
     from app.services.analysis.orchestrator import _safe_correlations
 
-    with pytest.raises(ValueError, match="Commodity"):
-        await _safe_correlations("GOLD")
+    result = await _safe_correlations("XAUUSDT")
+    assert result.symbol == "XAUUSDT"
+    # En az birkaç korelasyon olmalı (matrixteki diğer kriptolarla)
+    assert len(result.all) > 0
 
 
 def test_timings_class_measures_duration() -> None:

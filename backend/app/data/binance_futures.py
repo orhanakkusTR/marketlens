@@ -10,11 +10,56 @@ from typing import Any
 from app.core.cache import cached_call
 from app.core.config import settings
 from app.data.base import AbstractDataClient
+from app.data.binance_spot import TF_TO_INTERVAL, TF_TTL
 
 
 class BinanceFuturesClient(AbstractDataClient):
     def __init__(self) -> None:
         super().__init__(base_url=settings.binance_futures_url)
+
+    async def get_klines(
+        self,
+        symbol: str,
+        timeframe: str,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        """Futures OHLCV mumları (fapi/v1/klines).
+
+        Spot pair'de listelenmemiş ama Binance Futures'ta listelenmiş sembollerin
+        (ör. TradFi Perpetual XAUUSDT) kline'ları için. Yanıt formatı spot ile aynı.
+        """
+        if timeframe not in TF_TO_INTERVAL:
+            raise ValueError(f"Bilinmeyen timeframe: {timeframe}")
+        interval = TF_TO_INTERVAL[timeframe]
+        ttl = TF_TTL[timeframe]
+        return await cached_call(
+            key=f"binance_futures:klines:{symbol}:{timeframe}:{limit}",
+            ttl=ttl,
+            fetch_fn=lambda: self._fetch_klines(symbol, interval, limit),
+        )
+
+    async def _fetch_klines(
+        self, symbol: str, interval: str, limit: int
+    ) -> list[dict[str, Any]]:
+        response = await self.request(
+            "GET",
+            "/fapi/v1/klines",
+            params={"symbol": symbol, "interval": interval, "limit": limit},
+        )
+        return [
+            {
+                "open_time": k[0],
+                "open": float(k[1]),
+                "high": float(k[2]),
+                "low": float(k[3]),
+                "close": float(k[4]),
+                "volume": float(k[5]),
+                "close_time": k[6],
+                "quote_volume": float(k[7]),
+                "trades": int(k[8]),
+            }
+            for k in response.json()
+        ]
 
     async def get_funding_rate(self, symbol: str) -> dict[str, Any]:
         """Premium index — current funding + mark/index price."""

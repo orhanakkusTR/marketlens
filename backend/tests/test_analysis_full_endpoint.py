@@ -49,19 +49,31 @@ async def test_full_eth_4h(client) -> None:  # type: ignore[no-untyped-def]
     assert body["indicators"]["futures"] is not None
 
 
-async def test_full_gold_correlations_none(client) -> None:  # type: ignore[no-untyped-def]
-    """GOLD: correlations None (commodity), futures None, ama setup_quality dolu."""
-    r = await client.get("/api/v1/analysis/full/GOLD/4H")
-    # GOLD Binance kline'da yok — Phase 1 fail olabilir, 503 dönerse de OK
+async def test_full_xauusdt_routes_to_binance_futures(client) -> None:  # type: ignore[no-untyped-def]
+    """XAUUSDT (Binance TradFi Perpetual, Ocak 2026): routing Binance Futures'a.
+
+    Sembol Binance Futures'ta listelendiği için kline/funding/OI/L-S erişilebilir.
+    Yeterli mum geçmişi yoksa (Ichimoku 52 bar) Phase 1 503 dönebilir — bu
+    sembolün listelenme tarihinin yeni olmasından kaynaklı, geçici durum.
+    Önemli: 503 dönerken bile spot endpoint 400 değil; routing çalışıyor.
+    """
+    r = await client.get("/api/v1/analysis/full/XAUUSDT/4H")
     assert r.status_code in (200, 503)
+    body = r.json()
     if r.status_code == 200:
-        body = r.json()
-        assert body["correlations"] is None
-        assert body["indicators"]["futures"] is None
-        # Correlations None için Commodity exception → warning yok
-        # (kullanıcı tercihi: GOLD için sessiz)
-        corr_warnings = [w for w in body["warnings"] if "Korelasyon" in w]
-        assert len(corr_warnings) == 0
+        assert body["indicators"]["futures"] is not None
+        assert body["correlations"] is not None
+        assert body["setup_quality"] is not None
+        assert body["macro"] is not None
+        # Macro snapshot'ta "gold" alanı hala yfinance'tan (klasik gold futures)
+        assert body["macro"]["gold"] is not None
+    else:
+        # 503 — yeterli mum yok. Hata sebebi "Bad Request" DEĞİL olmalı (Binance
+        # Spot 400 → routing bozulmuş demek olur). Indicator/mum sayısı sebebi OK.
+        reason = (body.get("details") or {}).get("reason", "").lower()
+        assert "400 bad request" not in reason
+        # Tipik sebep: ichimoku için yeterli mum yok
+        assert "mum" in reason or "ichimoku" in reason or "yeterli" in reason
 
 
 async def test_full_cache_hit_speedup(client) -> None:  # type: ignore[no-untyped-def]

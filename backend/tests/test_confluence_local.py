@@ -158,11 +158,15 @@ def test_compute_local_confluence_strong_bullish_btc() -> None:
     assert result.components.futures is not None
 
 
-def test_compute_local_confluence_gold_no_futures() -> None:
-    """GOLD: futures None → weights renormalize, components.futures = None."""
+def test_compute_local_confluence_no_futures_renormalize() -> None:
+    """futures=None → weights renormalize, components.futures = None.
+
+    Ocak 2026 sonrası: XAUUSDT artık futures destekli, ama futures verisi
+    çekilemediği durumlar için renormalize davranışı korunur (synthetic test).
+    """
     df = klines_to_dataframe(linear_uptrend(n=100))
     result = compute_local_confluence(
-        symbol="GOLD",
+        symbol="XAUUSDT",
         timeframe="4H",
         df=df,
         trend=_make_trend(),

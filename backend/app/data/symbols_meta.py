@@ -6,7 +6,7 @@ ama bu adım için Python-side sabit liste yeterli (seed.py ile aynı kaynak tru
 from __future__ import annotations
 
 # Binance USDT-Futures destekleyen sembollerimiz (seed.py ile birebir).
-# GOLD/XAUUSD futures yok → has_futures=False.
+# Ocak 2026: Binance TradFi Perpetual Contracts başlattı → XAUUSDT artık futures destekli.
 SYMBOLS_WITH_FUTURES: frozenset[str] = frozenset(
     {
         "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "AVAXUSDT",
@@ -14,10 +14,11 @@ SYMBOLS_WITH_FUTURES: frozenset[str] = frozenset(
         "NEARUSDT", "APTUSDT", "ARBUSDT", "OPUSDT", "SHIBUSDT", "PEPEUSDT",
         "WIFUSDT", "BONKUSDT", "UNIUSDT", "AAVEUSDT", "LDOUSDT", "INJUSDT",
         "SUIUSDT", "SEIUSDT",
+        "XAUUSDT",  # Binance TradFi Perpetual (Ocak 2026)
     }
 )
 
-# CLAUDE.md sektör mapping'i — 27 sembol (26 kripto + GOLD).
+# CLAUDE.md sektör mapping'i — 27 sembol (26 kripto + XAUUSDT/Commodity).
 # Frontend filter, korelasyon sektör avg, rotation tracker (Adım 26) bu mapping'i kullanır.
 SECTORS: dict[str, str] = {
     # L1
@@ -33,8 +34,8 @@ SECTORS: dict[str, str] = {
     "WIFUSDT": "Meme", "BONKUSDT": "Meme",
     # Other
     "XRPUSDT": "Other", "LINKUSDT": "Other", "ATOMUSDT": "Other",
-    # Commodity
-    "GOLD": "Commodity",
+    # Commodity — XAUUSDT (Binance TradFi Perpetual; Ocak 2026)
+    "XAUUSDT": "Commodity",
 }
 
 ALL_SYMBOLS: tuple[str, ...] = tuple(SECTORS.keys())  # 27 sembol

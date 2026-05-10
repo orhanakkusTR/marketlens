@@ -6,7 +6,7 @@
 
 ## Proje Tanımı
 
-**MarketLens**, kişisel kullanım için profesyonel bir kripto + emtia karar destek terminalidir. 27 sembol (26 kripto + GOLD: BTC, ETH, SOL, BNB ve majors + Tier 1-4 altcoinler) üzerinde multi-timeframe (15m, 1H, 4H, 1D, 1W, 1M) teknik + macro + on-chain + SMC analiz yapar, **2-katmanlı confluence** (lokal + macro) skoru üretir, **A/B/C/D setup kalitesi** belirler, long/short senaryoları üretir, akıllı **risk yönetimi** yapar ve her analizde **Aksiyon Özeti** verir.
+**MarketLens**, kişisel kullanım için profesyonel bir kripto + emtia karar destek terminalidir. 27 sembol (26 kripto + XAUUSDT: BTC, ETH, SOL, BNB ve majors + Tier 1-4 altcoinler) üzerinde multi-timeframe (15m, 1H, 4H, 1D, 1W, 1M) teknik + macro + on-chain + SMC analiz yapar, **2-katmanlı confluence** (lokal + macro) skoru üretir, **A/B/C/D setup kalitesi** belirler, long/short senaryoları üretir, akıllı **risk yönetimi** yapar ve her analizde **Aksiyon Özeti** verir.
 
 **Kullanıcı:** Johnson (kullanıcı adı: orhanakkusTR) — Türk, kaldıraçlı işlem yapıyor (Binance Futures), Mac kullanıcısı, daha önce FastAPI + React + PostgreSQL projeler yaptı.
 
@@ -79,7 +79,7 @@ Eğer bir özellik eklerken bu kuralı bozma riski varsa **ekleme yapılmadan ku
 | Binance Futures | Funding, OI, L/S, likidasyonlar | Ücretsiz | 1 |
 | Binance Depth | Order book | Ücretsiz | 1 |
 | CoinGecko | TOTAL, TOTAL2, TOTAL3, BTC.D, ETH.D | Ücretsiz | 1 |
-| yfinance | GOLD, DXY, S&P, NASDAQ, VIX, US10Y | Ücretsiz | 1 |
+| yfinance | DXY, S&P, NASDAQ, VIX, US10Y, GOLD (macro snapshot) | Ücretsiz | 1 |
 | Alternative.me | Fear & Greed | Ücretsiz | 1 |
 | forexfactory | Ekonomik takvim (scrape) | Ücretsiz | 1 |
 | Coinglass | Likidasyon heatmap, ETF flow | $29/ay | 2 |
@@ -89,13 +89,13 @@ Eğer bir özellik eklerken bu kuralı bozma riski varsa **ekleme yapılmadan ku
 
 ---
 
-## Sembol Listesi (27: 26 kripto + GOLD)
+## Sembol Listesi (27: 26 kripto + XAUUSDT)
 
 **Tier 1 — Major:** BTC, ETH, SOL, BNB, XRP, AVAX, ADA, DOGE, POL, DOT
 **Tier 2 — Popüler:** LINK, ATOM, NEAR, APT, ARB, OP
 **Tier 3 — Trend/Meme:** SHIB, PEPE, WIF, BONK
 **Tier 4 — DeFi/sektör:** UNI, AAVE, LDO, INJ, SUI, SEI
-**Emtia:** GOLD (XAUUSD)
+**Emtia:** XAUUSDT (Binance TradFi Perpetual; Ocak 2026'da listelenmiştir)
 
 Sektör etiketleri:
 - L1: BTC, ETH, SOL, BNB, AVAX, ADA, DOT, NEAR, APT, SUI, SEI
@@ -103,7 +103,12 @@ Sektör etiketleri:
 - DeFi: UNI, AAVE, LDO, INJ
 - Meme: DOGE, SHIB, PEPE, WIF, BONK
 - Other: XRP, LINK, ATOM
-- Commodity: GOLD
+- Commodity: XAUUSDT
+
+**Futures desteği:** Ocak 2026'da Binance TradFi Perpetual Contracts kategorisi başlatıldı.
+27 sembolün **tamamı** artık futures destekli (kline + funding + OI + L/S). Macro snapshot için
+yfinance üzerinden klasik GOLD (GC=F) futures göstergesi ayrıca çekilmeye devam eder
+(macro context için, sembol bazlı analizden bağımsız).
 
 ---
 
@@ -627,7 +632,7 @@ Aksiyon Özeti'nde "📒 Journal'a Ekle" basıldığında:
 
 Önemli destek/direnç seviyelerine **otomatik** alarm kuran sistem. Manuel alarma ek olarak çalışır.
 
-**Default semboller:** BTC, ETH, GOLD (Settings'ten yönetilir)
+**Default semboller:** BTC, ETH, XAUUSDT (Settings'ten yönetilir)
 **Kullanıcı ekleyebilir:** Watchlist mantığı — Settings'te ekleme/çıkarma
 **Timeframe:** 4H + 1D (sadece bunlardan tespit, 15m/1H çok gürültülü, 1W/1M çok uzak)
 
@@ -649,7 +654,7 @@ Aksiyon Özeti'nde "📒 Journal'a Ekle" basıldığında:
 
 **Ayarlar (Settings sayfasında):**
 - Auto-Watch ON/OFF (master switch)
-- Sembol listesi (default: BTC, ETH, GOLD; ekleme/çıkarma)
+- Sembol listesi (default: BTC, ETH, XAUUSDT; ekleme/çıkarma)
 - Timeframe seçimi (4H + 1D default; sadece 1D yapılabilir)
 - Min confluence threshold (default: 1, "tüm tespit edilen seviyeler"; 2 veya 3 yapılabilir)
 - Günlük özet ON/OFF

@@ -28,7 +28,13 @@ def test_has_futures_btc() -> None:
     assert has_futures("BTCUSDT") is True
 
 
-def test_has_futures_gold() -> None:
+def test_has_futures_xauusdt_present() -> None:
+    """Ocak 2026 sonrası: XAUUSDT artık Binance TradFi Perpetual'da → True."""
+    assert has_futures("XAUUSDT") is True
+
+
+def test_has_futures_legacy_gold_codes() -> None:
+    """Eski code'lar (GOLD/XAUUSD) artık tanımlı değil."""
     assert has_futures("GOLD") is False
     assert has_futures("XAUUSD") is False
 

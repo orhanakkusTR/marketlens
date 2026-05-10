@@ -74,7 +74,10 @@ async def test_compute_all_unknown_module_raises() -> None:
         await indicator_engine.compute_all("BTCUSDT", "4H", modules=["foo"])  # type: ignore[list-item]
 
 
-async def test_compute_futures_returns_none_for_non_futures_symbol() -> None:
-    # GOLD has_futures=False → None
-    result = await indicator_engine.compute_futures("GOLD")
+async def test_compute_futures_returns_none_for_unknown_futures_symbol() -> None:
+    """has_futures=False bir sembol için futures None döner.
+
+    Ocak 2026 sonrası: 27 sembolün hepsi (XAUUSDT dahil) futures destekli;
+    bu testi bilinmeyen bir sembol kodu ile yapıyoruz."""
+    result = await indicator_engine.compute_futures("FAKEUSDT")
     assert result is None

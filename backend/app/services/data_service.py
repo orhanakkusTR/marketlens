@@ -16,6 +16,10 @@ from app.data.coingecko import CoinGeckoClient
 from app.data.fear_greed import AlternativeMeClient
 from app.data.yfinance_client import YFinanceClient
 
+# Spot pair'de listelenmemiş ama Binance Futures'ta listelenmiş semboller.
+# Ocak 2026: TradFi Perpetual XAUUSDT.
+_FUTURES_ONLY_SYMBOLS: frozenset[str] = frozenset({"XAUUSDT"})
+
 
 class DataService:
     def __init__(self) -> None:
@@ -27,10 +31,17 @@ class DataService:
         self.yfinance = YFinanceClient()
         self.fear_greed = AlternativeMeClient()
 
-    # ─── Binance Spot ───
+    # ─── Binance Spot (TradFi Perpetual'lar için Futures'a yönlendirilir) ───
     async def get_klines(
         self, symbol: str, timeframe: str, limit: int = 500
     ) -> list[dict[str, Any]]:
+        """Kline routing — TradFi Perpetual (XAUUSDT) için Futures'a düşer.
+
+        Spot pair'de yok, Futures'ta var olan sembollerin kline'ları fapi'den
+        çekilir. Yanıt formatı spot ile birebir aynı.
+        """
+        if symbol.upper() in _FUTURES_ONLY_SYMBOLS:
+            return await self.binance_futures.get_klines(symbol, timeframe, limit)
         return await self.binance_spot.get_klines(symbol, timeframe, limit)
 
     async def get_ticker_price(self, symbol: str) -> float:
