@@ -134,3 +134,16 @@ async def get_current_user(
         raise UnauthorizedError("Kullanıcı bulunamadı veya aktif değil")
 
     return user
+
+
+async def get_current_user_optional(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session: AsyncSession = Depends(get_session),
+) -> User | None:
+    """Opsiyonel auth — Bearer yoksa veya geçersizse None döner (401 değil)."""
+    if credentials is None:
+        return None
+    try:
+        return await get_current_user(credentials, session)
+    except UnauthorizedError:
+        return None

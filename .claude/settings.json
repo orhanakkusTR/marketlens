@@ -33,7 +33,13 @@
       "Bash(curl -s \"http://localhost:8000/api/v1/indicators/BTCUSDT/4H?modules=volatility,volume\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" \"http://localhost:8000/api/v1/analysis/no-trade-zones/BTCUSDT/4H\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" \"http://localhost:8000/api/v1/analysis/no-trade-zones/FOOBAR/4H\")",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" \"http://localhost:8000/api/v1/analysis/no-trade-zones/BTCUSDT/2H\")"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" \"http://localhost:8000/api/v1/analysis/no-trade-zones/BTCUSDT/2H\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" \"http://localhost:8000/api/v1/risk/daily-status\")",
+      "Bash(curl -s -X POST -H \"Content-Type: application/json\" -d '{\"symbol\":\"BTCUSDT\",\"direction\":\"long\",\"balance\":3000,\"base_risk_pct\":2.0,\"entry\":80500,\"stop\":79500,\"targets\":[83500,85500,88500],\"max_leverage\":10}' \"http://localhost:8000/api/v1/risk/calculate-position\")",
+      "Bash(curl -s \"http://localhost:8000/api/v1/risk/daily-status\")",
+      "Bash(curl -s -X POST -H \"Content-Type: application/json\" -d '{\"hours\":4}' \"http://localhost:8000/api/v1/risk/pause\")",
+      "Bash(curl -s -X POST -H \"Content-Type: application/json\" -d '{\"symbol\":\"BTCUSDT\",\"direction\":\"long\",\"balance\":3000,\"base_risk_pct\":2.0,\"entry\":80500,\"stop\":79500,\"targets\":[83500],\"max_leverage\":10,\"btc_24h_change_pct\":9.0}' \"http://localhost:8000/api/v1/risk/calculate-position\")",
+      "Bash(curl -s -X POST -H \"Content-Type: application/json\" -d '{\"symbol\":\"BTCUSDT\",\"direction\":\"short\",\"balance\":3000,\"base_risk_pct\":2.0,\"entry\":80500,\"stop\":81500,\"targets\":[77500],\"max_leverage\":10,\"funding_rate\":0.0001}' \"http://localhost:8000/api/v1/risk/calculate-position\")"
     ]
   }
 }

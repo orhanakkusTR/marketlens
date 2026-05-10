@@ -58,6 +58,72 @@ CACHE_TTL = 60  # 1dk — no-trade zone'lar time-based; zone değişimi <1dk iç
 
 GRADE_ORDER: list[SetupGrade] = ["D", "C", "B", "A"]
 
+RR_FULL_THRESHOLD = 3.0
+RR_PARTIAL_THRESHOLD = 1.5
+RR_STOP_ATR_MULTIPLIER = 1.5
+RR_FALLBACK_TP_ATR_MULTIPLIER = 3.0
+
+
+def _estimate_rr(
+    direction: str,
+    bundle: IndicatorBundle,
+) -> tuple[float | None, str]:
+    """Auto entry/stop/TP → R/R tahmini.
+
+    entry = current_price
+    stop  = current_price ∓ 1.5*ATR (direction-aware)
+    tp    = en yakın resistance/support (varsa); fallback current_price ± 3*ATR
+
+    Returns (rr, açıklama). Neutral veya hesaplanamaz → (None, açıklama).
+    """
+    if direction == "neutral":
+        return None, "Neutral direction — R/R hesabı yapılmaz"
+    if bundle.volatility is None:
+        return None, "ATR yok — R/R hesabı yapılamadı"
+
+    atr = bundle.volatility.atr.value_usdt
+    if atr <= 0:
+        return None, "ATR ≤ 0 — R/R hesabı yapılamadı"
+
+    # current_price: levels'tan veya ATR % üzerinden
+    if bundle.levels is not None:
+        current_price = bundle.levels.current_price
+    else:
+        atr_pct = bundle.volatility.atr.value_pct
+        if atr_pct <= 0:
+            return None, "Fiyat alınamadı — R/R hesabı yapılamadı"
+        current_price = atr / (atr_pct / 100)
+
+    if current_price <= 0:
+        return None, "Fiyat ≤ 0 — R/R hesabı yapılamadı"
+
+    if direction == "long":
+        stop = current_price - RR_STOP_ATR_MULTIPLIER * atr
+        tp_source = "fallback (ATR×3)"
+        tp = current_price + RR_FALLBACK_TP_ATR_MULTIPLIER * atr
+        if bundle.levels is not None and bundle.levels.resistances:
+            tp = bundle.levels.resistances[0].price
+            tp_source = "en yakın resistance"
+        reward = tp - current_price
+        risk = current_price - stop
+    elif direction == "short":
+        stop = current_price + RR_STOP_ATR_MULTIPLIER * atr
+        tp_source = "fallback (ATR×3)"
+        tp = current_price - RR_FALLBACK_TP_ATR_MULTIPLIER * atr
+        if bundle.levels is not None and bundle.levels.supports:
+            tp = bundle.levels.supports[0].price
+            tp_source = "en yakın support"
+        reward = current_price - tp
+        risk = stop - current_price
+    else:
+        return None, "Bilinmeyen direction"
+
+    if risk <= 0 or reward <= 0:
+        return None, "Risk/reward negatif veya sıfır"
+
+    rr = reward / risk
+    return rr, f"entry={current_price:.4g}, stop={stop:.4g}, TP={tp:.4g} ({tp_source})"
+
 
 def _compute_base_factors(
     final: FinalConfluenceResult,
@@ -119,14 +185,31 @@ def _compute_base_factors(
         )
     )
 
-    # 4. R:R ≥ 3 (+10) — Adım 16'da gerçek hesap
-    rr_passed = False  # MVP: scenario yok, 0 puan
+    # 4. R:R ≥ 3 (+10), partial 1.5-3 (+5) — auto entry/stop/TP üzerinden
+    rr, rr_detail = _estimate_rr(final.direction, bundle)
+    if rr is None:
+        rr_points = 0
+        rr_passed = False
+        rr_note = rr_detail
+    elif rr >= RR_FULL_THRESHOLD:
+        rr_points = 10
+        rr_passed = True
+        rr_note = f"R/R {rr:.2f} ≥ {RR_FULL_THRESHOLD} — {rr_detail}"
+    elif rr >= RR_PARTIAL_THRESHOLD:
+        rr_points = 5
+        rr_passed = True
+        rr_note = f"R/R {rr:.2f} (partial credit, {RR_PARTIAL_THRESHOLD}-{RR_FULL_THRESHOLD}) — {rr_detail}"
+    else:
+        rr_points = 0
+        rr_passed = False
+        rr_note = f"R/R {rr:.2f} < {RR_PARTIAL_THRESHOLD} — {rr_detail}"
+    score += rr_points
     factors.append(
         SetupFactor(
             name="R:R ≥ 3",
             passed=rr_passed,
-            points=0,
-            note="Future adımda gerçek hesap (R:R: Adım 16, scenario engine)",
+            points=rr_points,
+            note=rr_note,
         )
     )
 
