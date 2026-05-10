@@ -47,6 +47,8 @@ def test_modifier_neutral_direction_overrides_to_no_trade() -> None:
         macro_modifier=10.0,
         counter_trend_high_count=0,
         trade_quality_verdict="EXCELLENT",
+        no_trade_blocking=False,
+        no_trade_warning_count=0,
     )
     assert grade == "NO_TRADE"
 
@@ -58,6 +60,8 @@ def test_modifier_avoid_overrides_to_no_trade() -> None:
         macro_modifier=0.0,
         counter_trend_high_count=0,
         trade_quality_verdict="AVOID",
+        no_trade_blocking=False,
+        no_trade_warning_count=0,
     )
     assert grade == "NO_TRADE"
     assert mods["trade_quality_avoid"] == -99
@@ -70,6 +74,8 @@ def test_modifier_macro_strong_positive_upgrades() -> None:
         macro_modifier=20.0,  # > 15
         counter_trend_high_count=0,
         trade_quality_verdict="GOOD",
+        no_trade_blocking=False,
+        no_trade_warning_count=0,
     )
     assert grade == "A"
     assert mods["macro_strong_positive"] == 1
@@ -82,6 +88,8 @@ def test_modifier_macro_strong_negative_downgrades() -> None:
         macro_modifier=-20.0,
         counter_trend_high_count=0,
         trade_quality_verdict="GOOD",
+        no_trade_blocking=False,
+        no_trade_warning_count=0,
     )
     assert grade == "C"
     assert mods["macro_strong_negative"] == -1
@@ -94,6 +102,8 @@ def test_modifier_counter_trend_2plus_downgrades() -> None:
         macro_modifier=0.0,
         counter_trend_high_count=2,
         trade_quality_verdict="GOOD",
+        no_trade_blocking=False,
+        no_trade_warning_count=0,
     )
     assert grade == "C"
     assert mods["counter_trend"] == -1
@@ -106,6 +116,8 @@ def test_modifier_quality_excellent_upgrades() -> None:
         macro_modifier=0.0,
         counter_trend_high_count=0,
         trade_quality_verdict="EXCELLENT",
+        no_trade_blocking=False,
+        no_trade_warning_count=0,
     )
     assert grade == "B"
 
@@ -117,6 +129,8 @@ def test_modifier_quality_weak_downgrades() -> None:
         macro_modifier=0.0,
         counter_trend_high_count=0,
         trade_quality_verdict="WEAK",
+        no_trade_blocking=False,
+        no_trade_warning_count=0,
     )
     assert grade == "C"
 
@@ -129,6 +143,8 @@ def test_modifier_clamped_at_a_top() -> None:
         macro_modifier=20.0,
         counter_trend_high_count=0,
         trade_quality_verdict="EXCELLENT",
+        no_trade_blocking=False,
+        no_trade_warning_count=0,
     )
     assert grade == "A"
 
@@ -141,6 +157,8 @@ def test_modifier_clamped_at_d_bottom() -> None:
         macro_modifier=-20.0,
         counter_trend_high_count=2,
         trade_quality_verdict="WEAK",
+        no_trade_blocking=False,
+        no_trade_warning_count=0,
     )
     assert grade == "D"
 
@@ -153,7 +171,73 @@ def test_modifier_combined_offsetting() -> None:
         macro_modifier=20.0,
         counter_trend_high_count=0,
         trade_quality_verdict="WEAK",
+        no_trade_blocking=False,
+        no_trade_warning_count=0,
     )
     assert grade == "B"
     assert mods["macro_strong_positive"] == 1
     assert mods["trade_quality_weak"] == -1
+
+
+# ─── No-Trade Zone modifiers (Adım 14) ───
+
+
+def test_modifier_no_trade_blocking_overrides() -> None:
+    """≥1 blocking zone → NO_TRADE hard override."""
+    grade, mods = _apply_modifiers(
+        "A",
+        direction="long",
+        macro_modifier=20.0,
+        counter_trend_high_count=0,
+        trade_quality_verdict="EXCELLENT",
+        no_trade_blocking=True,
+        no_trade_warning_count=0,
+    )
+    assert grade == "NO_TRADE"
+    assert mods["no_trade_zone_blocking"] == -99
+
+
+def test_modifier_no_trade_warning_downgrades_one() -> None:
+    """≥1 warning zone → grade -1."""
+    grade, mods = _apply_modifiers(
+        "B",
+        direction="long",
+        macro_modifier=0.0,
+        counter_trend_high_count=0,
+        trade_quality_verdict="GOOD",
+        no_trade_blocking=False,
+        no_trade_warning_count=1,
+    )
+    assert grade == "C"
+    assert mods["no_trade_zone_warning"] == -1
+
+
+def test_modifier_no_trade_blocking_takes_precedence_over_avoid() -> None:
+    """Hard override hierarchy: AVOID önce sıraya gelir; ama ikisi de NO_TRADE üretir."""
+    grade, mods = _apply_modifiers(
+        "A",
+        direction="long",
+        macro_modifier=0.0,
+        counter_trend_high_count=0,
+        trade_quality_verdict="AVOID",
+        no_trade_blocking=True,
+        no_trade_warning_count=0,
+    )
+    assert grade == "NO_TRADE"
+
+
+def test_modifier_no_trade_warning_combines_with_others() -> None:
+    """Macro +1 + no_trade warning -1 = net 0 → A kalır (clamp final)."""
+    grade, mods = _apply_modifiers(
+        "A",
+        direction="long",
+        macro_modifier=20.0,
+        counter_trend_high_count=0,
+        trade_quality_verdict="GOOD",
+        no_trade_blocking=False,
+        no_trade_warning_count=2,
+    )
+    # idx: A=3 → +1 (macro) =4 → -1 (no_trade) =3 → clamp 3 → A
+    assert grade == "A"
+    assert mods["no_trade_zone_warning"] == -1
+    assert mods["macro_strong_positive"] == 1

@@ -38,6 +38,7 @@ from app.db.session import AsyncSessionLocal
 from app.schemas.confluence import AlignmentResult, FinalConfluenceResult
 from app.schemas.indicators import IndicatorBundle
 from app.schemas.macro import MacroSnapshot
+from app.schemas.no_trade_zone import NoTradeZoneResult
 from app.schemas.setup_quality import (
     SetupFactor,
     SetupGrade,
@@ -48,11 +49,12 @@ from app.services.indicators.engine import indicator_engine
 from app.services.macro.context import macro_service
 from app.services.quality.confidence_engine import confidence_engine
 from app.services.quality.counter_trend import counter_trend_detector
+from app.services.quality.no_trade_zone import no_trade_zone_detector
 from app.services.quality.trade_quality_filter import trade_quality_filter
 
 logger = get_logger(__name__)
 
-CACHE_TTL = 300  # 5dk
+CACHE_TTL = 60  # 1dk — no-trade zone'lar time-based; zone değişimi <1dk içinde yansısın
 
 GRADE_ORDER: list[SetupGrade] = ["D", "C", "B", "A"]
 
@@ -235,6 +237,8 @@ def _apply_modifiers(
     macro_modifier: float,
     counter_trend_high_count: int,
     trade_quality_verdict: str,
+    no_trade_blocking: bool,
+    no_trade_warning_count: int,
 ) -> tuple[SetupGrade, dict[str, int]]:
     """Final grade + uygulanan modifier'lar."""
     # Hard overrides
@@ -242,6 +246,8 @@ def _apply_modifiers(
         return "NO_TRADE", {"neutral_direction": 0}
     if trade_quality_verdict == "AVOID":
         return "NO_TRADE", {"trade_quality_avoid": -99}
+    if no_trade_blocking:
+        return "NO_TRADE", {"no_trade_zone_blocking": -99}
 
     modifiers: dict[str, int] = {}
 
@@ -264,6 +270,10 @@ def _apply_modifiers(
     elif trade_quality_verdict == "WEAK":
         idx -= 1
         modifiers["trade_quality_weak"] = -1
+
+    if no_trade_warning_count >= 1:
+        idx -= 1
+        modifiers["no_trade_zone_warning"] = -1
 
     idx = max(0, min(len(GRADE_ORDER) - 1, idx))
     return GRADE_ORDER[idx], modifiers
@@ -292,9 +302,8 @@ class SetupQualityEngine:
             klines = await indicator_engine._get_klines(symbol, timeframe)
             df = klines_to_dataframe(klines)
 
-            # Base score + factors
+            # Base score + factors (time-of-day faktörü ileride no_trade ile override edilir)
             base_score, base_factors = _compute_base_factors(final, alignment, bundle)
-            base_grade = _grade_from_score(base_score)
 
             # Counter-trend (direction kullanır)
             counter_warnings = counter_trend_detector.detect(
@@ -314,13 +323,64 @@ class SetupQualityEngine:
                 macro=macro,
             )
 
-            # Confidence (DB session gerekli)
+            # No-Trade Zones (BTC 24h proxy: BTC 1H 25 mum)
+            try:
+                btc_klines = await indicator_engine._get_klines("BTCUSDT", "1H", 25)
+                if len(btc_klines) >= 25:
+                    btc_old = float(btc_klines[0]["close"])
+                    btc_new = float(btc_klines[-1]["close"])
+                    btc_24h_change = (
+                        ((btc_new - btc_old) / btc_old) * 100 if btc_old > 0 else None
+                    )
+                else:
+                    btc_24h_change = None
+            except Exception as e:
+                logger.warning("btc_24h_change_failed", error=str(e))
+                btc_24h_change = None
+
+            # No-Trade + Confidence (her ikisi de DB session kullanır;
+            # No-Trade önce çünkü base_grade'i etkiliyor → confidence imzası tutarlı kalsın)
             local_session = session
             owned_session = False
             if local_session is None:
                 local_session = AsyncSessionLocal()
                 owned_session = True
             try:
+                no_trade = await no_trade_zone_detector.detect(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    df=df,
+                    volatility=bundle.volatility,
+                    volume=bundle.volume,
+                    btc_24h_change_pct=btc_24h_change,
+                    session=local_session,
+                    user_id=user_id,
+                )
+
+                # Time-of-day faktörünü no_trade sonucuna göre güncelle (5 puan)
+                time_factor_idx = next(
+                    (i for i, f in enumerate(base_factors) if f.name == "Time-of-day uygun"),
+                    None,
+                )
+                if time_factor_idx is not None:
+                    time_blocked = (
+                        no_trade.is_blocking or no_trade.severity_summary.warning >= 1
+                    )
+                    if time_blocked and base_factors[time_factor_idx].passed:
+                        blocking_types = [
+                            z.type for z in no_trade.zones
+                            if z.severity in ("blocking", "warning")
+                        ]
+                        base_factors[time_factor_idx] = SetupFactor(
+                            name="Time-of-day uygun",
+                            passed=False,
+                            points=0,
+                            note=f"No-trade zone aktif: {', '.join(blocking_types)}",
+                        )
+                        base_score -= 5
+
+                base_grade = _grade_from_score(base_score)
+
                 confidence = await confidence_engine.compute(
                     local_session,
                     symbol_category=final.symbol_type,
@@ -334,12 +394,15 @@ class SetupQualityEngine:
                     await local_session.close()
 
             # Final grade + modifiers
+            warning_count = no_trade.severity_summary.warning
             final_grade, modifiers_applied = _apply_modifiers(
                 base_grade,
                 direction=final.direction,
                 macro_modifier=final.macro_modifier,
                 counter_trend_high_count=high_severity_count,
                 trade_quality_verdict=quality_result.verdict,
+                no_trade_blocking=no_trade.is_blocking,
+                no_trade_warning_count=warning_count,
             )
 
             result = SetupQualityResult(
@@ -355,6 +418,7 @@ class SetupQualityEngine:
                 confidence=confidence,
                 counter_trend_warnings=counter_warnings,
                 trade_quality=quality_result,
+                no_trade_zones=no_trade,
                 computed_at=datetime.now(UTC),
             )
             return result.model_dump(mode="json")

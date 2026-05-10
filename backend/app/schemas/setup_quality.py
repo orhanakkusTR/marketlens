@@ -14,6 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.confluence import TradeDirection
+from app.schemas.no_trade_zone import NoTradeZoneResult
 
 
 class _Strict(BaseModel):
@@ -98,5 +99,6 @@ class SetupQualityResult(_Strict):
     confidence: ConfidenceResult
     counter_trend_warnings: list[CounterTrendWarning]
     trade_quality: TradeQualityResult
+    no_trade_zones: NoTradeZoneResult
 
     computed_at: datetime
