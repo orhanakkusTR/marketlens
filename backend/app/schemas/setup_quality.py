@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.confluence import TradeDirection
 from app.schemas.no_trade_zone import NoTradeZoneResult
+from app.schemas.scenario import ScenarioResult
 
 
 class _Strict(BaseModel):
@@ -100,5 +101,8 @@ class SetupQualityResult(_Strict):
     counter_trend_warnings: list[CounterTrendWarning]
     trade_quality: TradeQualityResult
     no_trade_zones: NoTradeZoneResult
+    scenario: ScenarioResult | None = Field(
+        None, description="Neutral direction veya veriler yetersizse None"
+    )
 
     computed_at: datetime

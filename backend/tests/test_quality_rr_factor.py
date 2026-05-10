@@ -1,11 +1,22 @@
-"""Setup Quality R/R factor — Adım 15 ile gerçek hesap.
+"""Setup Quality R/R factor — Adım 16 sonrası scenario.rr_weighted üzerinden.
 
-Önce placeholder'dı, şimdi auto entry/stop/TP üzerinden hesaplanıyor.
+Adım 15'te _estimate_rr placeholder yerine kullanılıyordu; Adım 16'da bunu
+deprecate ettik ve scenario.rr_weighted tek source of truth oldu.
+
+Bu modül `_compute_base_factors`'ın R/R faktörünü scenario ile doğru hesaplayıp
+hesaplamadığını test eder.
 """
 from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from app.schemas.confluence import (
+    AlignmentResult,
+    FinalConfluenceResult,
+    ScoreBreakdown,
+    TimeframeScore,
+    ModifierBreakdown,
+)
 from app.schemas.indicators import (
     ATRResult,
     BollingerResult,
@@ -14,10 +25,16 @@ from app.schemas.indicators import (
     LevelsResult,
     VolatilityIndicators,
 )
+from app.schemas.scenario import (
+    EntryBand,
+    ScenarioResult,
+    StopLevel,
+    TPLevel,
+)
 from app.services.quality.setup_quality import (
     RR_FULL_THRESHOLD,
     RR_PARTIAL_THRESHOLD,
-    _estimate_rr,
+    _compute_base_factors,
 )
 
 
@@ -61,75 +78,124 @@ def _bundle(
     )
 
 
-# ─── Direction handling ───
-
-
-def test_rr_neutral_returns_none() -> None:
-    rr, note = _estimate_rr("neutral", _bundle())
-    assert rr is None
-    assert "Neutral" in note
-
-
-def test_rr_long_with_nearby_resistance() -> None:
-    """Entry 80500, stop = 80500 - 1.5*500 = 79750 (risk 750).
-    TP = en yakın resistance 83500 (reward 3000). R/R = 4.0.
-    """
-    rr, note = _estimate_rr("long", _bundle(resistances=[83500.0]))
-    assert rr is not None
-    assert abs(rr - 4.0) < 1e-3
-    assert "resistance" in note
-
-
-def test_rr_short_with_nearby_support() -> None:
-    """Short: entry 80500, stop = 80500 + 1.5*500 = 81250 (risk 750).
-    TP = en yakın support 78000 (reward 2500). R/R = 3.333.
-    """
-    rr, note = _estimate_rr(
-        "short", _bundle(supports=[78000.0]),
+def _final(direction: str = "long", score: float = 60.0) -> FinalConfluenceResult:
+    return FinalConfluenceResult(
+        symbol="BTCUSDT",
+        timeframe="4H",
+        symbol_type="btc",
+        local_score=score,
+        components=ScoreBreakdown(
+            trend=score, momentum=score, volume=score,
+            volatility=score, futures=score,
+        ),
+        weights_applied={
+            "trend": 0.40, "momentum": 0.20, "volume": 0.15,
+            "volatility": 0.10, "futures": 0.15,
+        },
+        macro_modifier=0.0,
+        macro_breakdown=ModifierBreakdown(dxy=0.0, vix=15.0),
+        final_score=score,
+        label="bullish" if score > 30 else "neutral",
+        direction=direction,  # type: ignore[arg-type]
+        market_regime="MIXED",
+        computed_at=datetime.now(UTC),
     )
-    assert rr is not None
-    assert abs(rr - (2500 / 750)) < 1e-3
-    assert "support" in note
 
 
-def test_rr_fallback_when_no_resistances() -> None:
-    """Resistances list empty → fallback current_price + 3*ATR.
-    Entry 80500, stop 79750 (risk 750), tp 80500 + 1500 = 82000 (reward 1500). R/R = 2.0.
-    """
-    bundle = _bundle()
-    bundle.levels.resistances.clear()
-    rr, note = _estimate_rr("long", bundle)
-    assert rr is not None
-    assert abs(rr - 2.0) < 1e-3
-    assert "fallback" in note
+def _alignment_empty() -> AlignmentResult:
+    return AlignmentResult(
+        symbol="BTCUSDT",
+        alignment_score=0.0,
+        label="weak",
+        consistent_direction=None,
+        by_timeframe=[],
+        weights={},
+        computed_at=datetime.now(UTC),
+    )
 
 
-def test_rr_no_volatility_returns_none() -> None:
-    bundle = _bundle()
-    bundle.volatility = None
-    rr, note = _estimate_rr("long", bundle)
-    assert rr is None
+def _scenario_with_rr(rr_weighted: float, direction: str = "long") -> ScenarioResult:
+    """Sentetik scenario — sadece rr_weighted manters."""
+    return ScenarioResult(
+        symbol="BTCUSDT",
+        timeframe="4H",
+        direction=direction,  # type: ignore[arg-type]
+        entry=EntryBand(low=80350, mid=80500, high=80650, width_atr=0.6),
+        stop=StopLevel(
+            price=79750, source="support", distance_atr=1.5,
+            distance_pct=0.93, reasoning="test stop",
+        ),
+        targets=[
+            TPLevel(
+                price=80500 + 1000, source="test", distance_atr=2.0,
+                distance_pct=1.24, rr=rr_weighted, reasoning="test tp",
+            )
+        ],
+        rr_weighted=rr_weighted,
+        final_confluence=60.0,
+        reasoning="test",
+        computed_at=datetime.now(UTC),
+    )
+
+
+# ─── R/R factor scoring ───
 
 
 def test_rr_above_3_full_credit() -> None:
-    """R/R 4.0 ≥ 3.0 → full credit."""
-    rr, _ = _estimate_rr("long", _bundle(resistances=[83500.0]))
-    assert rr is not None
-    assert rr >= RR_FULL_THRESHOLD
+    """rr_weighted ≥ 3 → +10 puan."""
+    score, factors = _compute_base_factors(
+        _final("long"), _alignment_empty(), _bundle(),
+        _scenario_with_rr(3.5),
+    )
+    rr_factor = next(f for f in factors if f.name == "R:R ≥ 3")
+    assert rr_factor.passed is True
+    assert rr_factor.points == 10
 
 
-def test_rr_between_partial_threshold() -> None:
-    """Resistance 82000 → reward 1500, risk 750 → R/R 2.0 (partial)."""
-    rr, _ = _estimate_rr("long", _bundle(resistances=[82000.0]))
-    assert rr is not None
-    assert RR_PARTIAL_THRESHOLD <= rr < RR_FULL_THRESHOLD
+def test_rr_partial_credit() -> None:
+    """1.5 ≤ rr_weighted < 3 → +5 puan."""
+    score, factors = _compute_base_factors(
+        _final("long"), _alignment_empty(), _bundle(),
+        _scenario_with_rr(2.0),
+    )
+    rr_factor = next(f for f in factors if f.name == "R:R ≥ 3")
+    assert rr_factor.passed is True
+    assert rr_factor.points == 5
 
 
-def test_rr_below_partial_threshold() -> None:
-    """Resistance 81000 → reward 500, risk 750 → R/R 0.67 (zero credit)."""
-    rr, _ = _estimate_rr("long", _bundle(resistances=[81000.0]))
-    assert rr is not None
-    assert rr < RR_PARTIAL_THRESHOLD
+def test_rr_below_partial_zero_credit() -> None:
+    """rr_weighted < 1.5 → 0 puan."""
+    score, factors = _compute_base_factors(
+        _final("long"), _alignment_empty(), _bundle(),
+        _scenario_with_rr(0.8),
+    )
+    rr_factor = next(f for f in factors if f.name == "R:R ≥ 3")
+    assert rr_factor.passed is False
+    assert rr_factor.points == 0
+
+
+def test_rr_neutral_direction_no_scenario() -> None:
+    """Direction neutral → scenario=None → 0 puan + 'Neutral' note."""
+    score, factors = _compute_base_factors(
+        _final("neutral"), _alignment_empty(), _bundle(),
+        None,  # scenario None
+    )
+    rr_factor = next(f for f in factors if f.name == "R:R ≥ 3")
+    assert rr_factor.passed is False
+    assert rr_factor.points == 0
+    assert "Neutral" in rr_factor.note
+
+
+def test_rr_scenario_none_other_reasons() -> None:
+    """Scenario None ama direction long (veriler yetersiz) → 0 puan + 'üretilemedi' note."""
+    score, factors = _compute_base_factors(
+        _final("long"), _alignment_empty(), _bundle(),
+        None,
+    )
+    rr_factor = next(f for f in factors if f.name == "R:R ≥ 3")
+    assert rr_factor.passed is False
+    assert rr_factor.points == 0
+    assert "üretilemedi" in rr_factor.note
 
 
 def test_rr_constants() -> None:

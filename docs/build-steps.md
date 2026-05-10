@@ -976,6 +976,14 @@ Analiz: useQuery → POST /api/v1/analysis/run.
 
 ### Adım 21: Aksiyon Özeti + Hesabı Göster Modal + Pozisyon Yardımcısı
 
+> **NOT (Adım 16'dan):** Backend tarafında `action_summary` modülü ayrı bir adım
+> olarak yazılmıyor. Aksiyon Özeti'nin tüm verisi mevcut modüllerden gelir:
+> `scenario` (entry/stop/TP'ler), `setup_quality` (grade + factors + confidence +
+> counter-trend + trade-quality + no-trade-zones), `risk` (position size + leverage).
+> Bu adımda frontend bu üç response'u kompoze eder ve kullanıcı dostu Türkçe metni
+> burada üretir (kopyala-yapıştır pozisyon planı dahil). Tek source of truth: backend
+> structured response; presentation layer frontend'de.
+
 ```
 src/components/dashboard/ActionSummary.tsx
 
