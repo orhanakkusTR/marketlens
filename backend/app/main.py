@@ -25,6 +25,7 @@ from app.core.middleware import (
     limiter,
     rate_limit_exceeded_handler,
 )
+from app.api.v1 import alignment as alignment_v1
 from app.api.v1 import auth as auth_v1
 from app.api.v1 import confluence as confluence_v1
 from app.api.v1 import indicators as indicators_v1
@@ -103,6 +104,7 @@ app.include_router(auth_v1.router, prefix="/api/v1")
 app.include_router(indicators_v1.router, prefix="/api/v1")
 app.include_router(confluence_v1.router, prefix="/api/v1")
 app.include_router(macro_v1.router, prefix="/api/v1")
+app.include_router(alignment_v1.router, prefix="/api/v1")
 
 
 @app.get("/health")

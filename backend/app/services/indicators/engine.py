@@ -20,7 +20,11 @@ from app.core.cache import cached_call
 from app.core.logging import get_logger
 from app.data.binance_spot import TF_TO_INTERVAL, TF_TTL
 from app.data.symbols_meta import has_futures as _has_futures
-from app.schemas.confluence import LocalConfluenceResult
+from app.schemas.confluence import (
+    AlignmentResult,
+    FinalConfluenceResult,
+    LocalConfluenceResult,
+)
 from app.schemas.indicators import (
     FibonacciResult,
     FuturesIndicators,
@@ -32,7 +36,13 @@ from app.schemas.indicators import (
     VolatilityIndicators,
     VolumeIndicators,
 )
+from app.services.confluence.alignment import (
+    ALIGNMENT_WEIGHTS,
+    compute_multi_tf_alignment as _alignment_fn,
+)
+from app.services.confluence.final import compute_final_confluence as _final_fn
 from app.services.confluence.local import compute_local_confluence
+from app.services.macro.context import macro_service
 from app.services.data_service import data_service
 from app.services.indicators.base import klines_to_dataframe, run_cpu_bound
 from app.services.indicators.fibonacci.auto_fib import compute_fibonacci
@@ -454,6 +464,53 @@ class IndicatorEngine:
             fetch_fn=fetch,
         )
         return LocalConfluenceResult.model_validate(raw)
+
+    # ── final confluence (local + macro modifier) ──
+    async def compute_final_confluence(
+        self,
+        symbol: str,
+        timeframe: str,
+    ) -> FinalConfluenceResult:
+        """Local confluence + macro modifier compose."""
+        if timeframe not in TF_TO_INTERVAL:
+            raise ValueError(f"Bilinmeyen timeframe: {timeframe}")
+
+        async def fetch() -> dict[str, Any]:
+            local = await self.compute_local_confluence(symbol, timeframe)
+            macro = await macro_service.get_snapshot()
+            result = _final_fn(local, macro)
+            return result.model_dump(mode="json")
+
+        raw = await cached_call(
+            key=f"confluence:final:{symbol}:{timeframe}",
+            ttl=TF_TTL[timeframe],
+            fetch_fn=fetch,
+        )
+        return FinalConfluenceResult.model_validate(raw)
+
+    # ── multi-TF alignment ──
+    async def compute_multi_tf_alignment(self, symbol: str) -> AlignmentResult:
+        """6 TF için final score, weighted alignment, label + consistent_direction."""
+
+        async def fetch() -> dict[str, Any]:
+            import asyncio as _asyncio
+
+            tasks = {
+                tf: self.compute_final_confluence(symbol, tf)
+                for tf in ALIGNMENT_WEIGHTS
+            }
+            results = await _asyncio.gather(*tasks.values())
+            scores_by_tf = dict(zip(tasks.keys(), results, strict=True))
+            alignment = _alignment_fn(symbol, scores_by_tf)
+            return alignment.model_dump(mode="json")
+
+        # 5dk cache (macro snapshot TTL ile uyumlu)
+        raw = await cached_call(
+            key=f"confluence:alignment:{symbol}",
+            ttl=300,
+            fetch_fn=fetch,
+        )
+        return AlignmentResult.model_validate(raw)
 
     async def close(self) -> None:
         # Engine kendi resource tutmuyor (data_service ayrıca close edilir)
