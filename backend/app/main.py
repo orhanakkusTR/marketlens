@@ -31,6 +31,7 @@ from app.api.v1 import confluence as confluence_v1
 from app.api.v1 import correlations as correlations_v1
 from app.api.v1 import indicators as indicators_v1
 from app.api.v1 import macro as macro_v1
+from app.api.v1 import quality as quality_v1
 from app.db.session import engine
 
 # Logging modül yüklenirken yapılandırılır — uvicorn başlamadan önce çalışsın diye.
@@ -107,6 +108,7 @@ app.include_router(confluence_v1.router, prefix="/api/v1")
 app.include_router(macro_v1.router, prefix="/api/v1")
 app.include_router(alignment_v1.router, prefix="/api/v1")
 app.include_router(correlations_v1.router, prefix="/api/v1")
+app.include_router(quality_v1.router, prefix="/api/v1")
 
 
 @app.get("/health")
