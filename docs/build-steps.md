@@ -1314,7 +1314,17 @@ lightweight-charts v4 entegrasyon.
 - Candlestick series
 - EMA/SMA çizgileri (TF'e göre uygun set)
 - Bollinger Bands (toggle)
-- Yatay çizgiler: hedefler (yeşil dashed), stop (kırmızı), Fib (turuncu), VWAP
+- Yatay çizgiler — DEFAULT: S/R Seviyeleri (Adım 21 polish kararı):
+  * R1/R2/R3 kırmızı kesik çizgi + ★ skor label (ActionHeader'daki LevelsBlock ile tutarlı)
+  * S1/S2/S3 yeşil kesik çizgi + ★ skor label
+  * Şu an fiyat mavi referans çizgi
+  * Veri kaynağı: analysis.indicators.levels (zaten payload'da)
+  * Sebep: S/R seviyeleri evrensel; TP/SL setup'a özel — sembol/yön değişince ilgisiz kalır
+- Toggle butonu: [✓ S/R Seviyeleri] [□ TP/SL Setup]
+  * Default: S/R seviyeleri
+  * TP/SL setup yalnızca scenario != null ise toggle aktif
+  * TP/SL aktifse: hedefler (yeşil dashed), stop (kırmızı), entry band (gri)
+- Fib (turuncu, toggle), VWAP (toggle)
 - Volume histogram alt panel
 
 Order book heatmap component:

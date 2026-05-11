@@ -49,6 +49,10 @@ ATR_ZSCORE_HIGH = 2.0
 
 STOP_TOO_TIGHT_PCT = 0.3
 
+# Futures'ta 1x kaldıraç var olmaz + 1x liquidation formülü entry*0 = 0 üretir
+# (edge case bug). Minimum 2x clamp uygulanır.
+MIN_LEVERAGE = 2
+
 TP_WEIGHTS: tuple[float, float, float] = (0.40, 0.35, 0.25)
 
 FUNDING_PERIODS_24H = 3  # 8h * 3
@@ -242,13 +246,15 @@ def compute_position(
         )
         # Hesabı yine de yap ama position_size aşırı şişer — kullanıcıyı uyar
         position_size_usd = 0.0
-        leverage_required = 1
-        leverage_actual = 1
+        leverage_required = MIN_LEVERAGE
+        leverage_actual = MIN_LEVERAGE
         margin_used = 0.0
     else:
         position_size_usd = risk_amount / (stop_distance_pct / 100)
-        leverage_required = max(1, ceil(position_size_usd / balance))
-        leverage_actual = min(leverage_required, max_leverage)
+        leverage_required = max(MIN_LEVERAGE, ceil(position_size_usd / balance))
+        leverage_actual = max(
+            MIN_LEVERAGE, min(leverage_required, max_leverage)
+        )
         margin_used = position_size_usd / leverage_actual
 
         if leverage_required > max_leverage:

@@ -1,43 +1,37 @@
-import { useParams } from "react-router-dom";
+/**
+ * Sembol Detayı — Adım 21.
+ *
+ * URL: /symbol/:code?tf=4H
+ * İçerik: <ActionSummary /> — 6 bölüm composite (Header, Scenario, Position,
+ * Warnings, Macro+Korelasyon, İndikatör Özeti).
+ *
+ * TF state Topbar SymbolHeader'da yönetiliyor (URL ?tf=).
+ */
+import { useParams, useSearchParams } from "react-router-dom";
 
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { ActionSummary } from "@/components/dashboard/ActionSummary";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+
+const VALID_TFS: ReadonlyArray<string> = ["15m", "1H", "4H", "1D"];
+const DEFAULT_TF = "4H";
 
 export function SymbolDetail() {
   const { code } = useParams<{ code: string }>();
-  const symbol = code?.toUpperCase() ?? "BİLİNMEYEN";
-  useDocumentTitle(symbol);
+  const [searchParams] = useSearchParams();
+  const symbol = code?.toUpperCase() ?? "";
+  const tfParam = searchParams.get("tf");
+  const tf =
+    tfParam && VALID_TFS.includes(tfParam) ? tfParam : DEFAULT_TF;
 
-  return (
-    <div className="mx-auto max-w-5xl space-y-4">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <CardTitle className="font-mono">{symbol}</CardTitle>
-            <Badge variant="accent">placeholder</Badge>
-          </div>
-          <CardDescription>
-            Sembol detayı — confluence, alignment, scenario, risk, Aksiyon Özeti
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-binance-text-secondary">
-            İçerik <span className="font-mono">Adım 21-22</span>'de
-            implement edilecek. Backend{" "}
-            <span className="font-mono">
-              GET /api/v1/analysis/full/{symbol}/{"{tf}"}
-            </span>{" "}
-            tek istekte tüm verisi hazır.
-          </p>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  useDocumentTitle(`${symbol.replace(/USDT$/, "")} — ${tf}`);
+
+  if (!symbol) {
+    return (
+      <div className="mx-auto max-w-5xl text-sm text-binance-text-muted">
+        Sembol bulunamadı.
+      </div>
+    );
+  }
+
+  return <ActionSummary symbol={symbol} timeframe={tf} />;
 }
