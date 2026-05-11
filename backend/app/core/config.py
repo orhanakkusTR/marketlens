@@ -92,6 +92,7 @@ class Settings(BaseSettings):
     binance_spot_url: str = "https://api.binance.com"
     binance_futures_url: str = "https://fapi.binance.com"
     binance_ws_url: str = "wss://stream.binance.com:9443/ws"
+    binance_futures_ws_url: str = "wss://fstream.binance.com/ws"
 
     coingecko_api_key: str = ""
     coingecko_base_url: str = "https://api.coingecko.com/api/v3"

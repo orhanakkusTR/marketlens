@@ -11,17 +11,20 @@ import { Outlet } from "react-router-dom";
 
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
+import { PriceWebSocketProvider } from "@/components/ws/PriceWebSocketProvider";
 
 export function AppShell() {
   return (
-    <div className="grid h-screen grid-cols-[240px_1fr] bg-binance-bg">
-      <Sidebar />
-      <div className="flex h-screen flex-col overflow-hidden">
-        <Topbar />
-        <main className="flex-1 overflow-y-auto p-4">
-          <Outlet />
-        </main>
+    <PriceWebSocketProvider>
+      <div className="grid h-screen grid-cols-[240px_1fr] bg-binance-bg">
+        <Sidebar />
+        <div className="flex h-screen flex-col overflow-hidden">
+          <Topbar />
+          <main className="flex-1 overflow-y-auto p-4">
+            <Outlet />
+          </main>
+        </div>
       </div>
-    </div>
+    </PriceWebSocketProvider>
   );
 }

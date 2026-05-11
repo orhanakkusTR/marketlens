@@ -1,10 +1,15 @@
 /**
- * Sol Sidebar — 240px.
+ * Sol Sidebar — 240px (Adım 19 gerçek implementasyon).
  *
+ * Yapı:
  * - Logo (60px üst)
- * - 27 sembol tier başlıklarıyla placeholder listesi (scrollable)
- *   (gerçek implementasyon Adım 19 — multi-symbol WebSocket akışı)
- * - Alt nav linkler (Dashboard, Heatmap, Scanner, Journal, Settings)
+ * - ConnectionStatus (WS bağlantı dot + manuel reconnect)
+ * - 27 sembol tier başlıklarıyla (real-time fiyat + 24h% + grade badge)
+ * - Alt nav linkler
+ *
+ * Data kaynakları:
+ * - Real-time fiyat: usePricesStore (WS upstream)
+ * - Grade + direction: useGrades (TanStack Query — /api/v1/symbols/grades 60s)
  */
 import {
   Activity,
@@ -16,46 +21,12 @@ import {
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
-import { Badge } from "@/components/ui/badge";
+import { ConnectionStatus } from "@/components/sidebar/ConnectionStatus";
+import { SymbolRow } from "@/components/sidebar/SymbolRow";
+import { useGrades } from "@/hooks/useGrades";
+import { SYMBOL_TIERS } from "@/lib/symbols";
 import { cn } from "@/lib/utils";
-
-// CLAUDE.md sembol tier'ları (placeholder; gerçek veri Adım 19'da)
-const SYMBOL_TIERS: ReadonlyArray<{
-  title: string;
-  symbols: ReadonlyArray<string>;
-}> = [
-  {
-    title: "Tier 1 — Major",
-    symbols: [
-      "BTCUSDT",
-      "ETHUSDT",
-      "SOLUSDT",
-      "BNBUSDT",
-      "XRPUSDT",
-      "AVAXUSDT",
-      "ADAUSDT",
-      "DOGEUSDT",
-      "POLUSDT",
-      "DOTUSDT",
-    ],
-  },
-  {
-    title: "Tier 2 — Popüler",
-    symbols: ["LINKUSDT", "ATOMUSDT", "NEARUSDT", "APTUSDT", "ARBUSDT", "OPUSDT"],
-  },
-  {
-    title: "Tier 3 — Meme",
-    symbols: ["SHIBUSDT", "PEPEUSDT", "WIFUSDT", "BONKUSDT"],
-  },
-  {
-    title: "Tier 4 — DeFi",
-    symbols: ["UNIUSDT", "AAVEUSDT", "LDOUSDT", "INJUSDT", "SUIUSDT", "SEIUSDT"],
-  },
-  {
-    title: "Emtia",
-    symbols: ["XAUUSDT"],
-  },
-];
+import { usePricesStore } from "@/stores/usePrices";
 
 const NAV_ITEMS: ReadonlyArray<{
   to: string;
@@ -72,6 +43,9 @@ const NAV_ITEMS: ReadonlyArray<{
 ];
 
 export function Sidebar() {
+  const prices = usePricesStore((s) => s.prices);
+  const { bySymbol: grades } = useGrades("4H");
+
   return (
     <aside className="flex h-screen w-60 flex-col border-r border-binance-border bg-binance-surface">
       {/* Logo (60px) */}
@@ -82,7 +56,10 @@ export function Sidebar() {
         </span>
       </div>
 
-      {/* Sembol listesi — scrollable, kalan dikey alan */}
+      {/* WS connection status */}
+      <ConnectionStatus />
+
+      {/* Sembol listesi — scrollable */}
       <div className="flex-1 overflow-y-auto px-2 py-3">
         {SYMBOL_TIERS.map((tier) => (
           <div key={tier.title} className="mb-4">
@@ -92,22 +69,11 @@ export function Sidebar() {
             <ul className="space-y-0.5">
               {tier.symbols.map((sym) => (
                 <li key={sym}>
-                  <NavLink
-                    to={`/symbol/${sym}`}
-                    className={({ isActive }) =>
-                      cn(
-                        "flex items-center justify-between rounded-md px-2 py-1.5 text-xs transition-colors",
-                        isActive
-                          ? "bg-binance-border/60 text-binance-text-primary"
-                          : "text-binance-text-secondary hover:bg-binance-border/30 hover:text-binance-text-primary"
-                      )
-                    }
-                  >
-                    <span className="font-mono">{sym.replace("USDT", "")}</span>
-                    <Badge variant="outline" className="text-[10px]">
-                      —
-                    </Badge>
-                  </NavLink>
+                  <SymbolRow
+                    symbol={sym}
+                    price={prices.get(sym)}
+                    grade={grades.get(sym)}
+                  />
                 </li>
               ))}
             </ul>

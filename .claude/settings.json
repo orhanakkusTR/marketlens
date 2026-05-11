@@ -61,7 +61,11 @@
       "Bash(curl -s -o /dev/null -w \"Symbol page: %{http_code}\\\\n\" http://localhost:5173/symbol/BTCUSDT)",
       "Bash(curl -s http://localhost:5173/)",
       "Bash(curl -s -X POST -H \"Content-Type: application/json\" -d '{\"email\":\"orhanakkustr@gmail.com\",\"password\":\"YanlisSifre\"}' http://localhost:8000/api/v1/auth/login)",
-      "Bash(curl -s -X POST -H \"Content-Type: application/json\" -d '{\"email\":\"orhanakkustr@gmail.com\",\"password\":\"TestPassword123\"}' http://localhost:8000/api/v1/auth/login)"
+      "Bash(curl -s -X POST -H \"Content-Type: application/json\" -d '{\"email\":\"orhanakkustr@gmail.com\",\"password\":\"TestPassword123\"}' http://localhost:8000/api/v1/auth/login)",
+      "Bash(curl -s \"https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=XAUUSDT\")",
+      "Bash(curl -s \"http://localhost:8000/api/v1/symbols/grades\")",
+      "Bash(curl -s -o /dev/null -w \"Frontend: HTTP %{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(curl -s -o /dev/null -w \"Login page: HTTP %{http_code}\\\\n\" http://localhost:5173/login)"
     ]
   }
 }

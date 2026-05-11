@@ -943,6 +943,16 @@ State: useSelections store.
 WebSocket: real-time fiyat güncelle.
 ```
 
+> **NOT (Future Roadmap — Production hardening):**
+> - **WS auth**: Adım 19'da token query param `?token=...` kullanıldı. Production
+>   deploy'da STOMP/CONNECT frame'iyle değiştirilebilir — URL log/proxy access log
+>   üzerinde token görünme riskini azaltır. Mevcut akış: handshake sonrası ilk
+>   CONNECT mesajıyla Authorization header'ı emülasyonu.
+> - **Sembol filtreleri** (favori/A+B filtre): Adım 19'da skip; client-driven
+>   subscribe mantığı yerli olarak hazır (subscribe message), UI Adım 22+'da eklenir.
+> - **Setup/Direction collapse** (240→60px ikon-only): Adım 22+ ekran kayıt
+>   ihtiyaçları belli olduğunda.
+
 ---
 
 ### Adım 20: Dashboard — Ana Yapı

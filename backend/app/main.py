@@ -34,6 +34,8 @@ from app.api.v1 import indicators as indicators_v1
 from app.api.v1 import macro as macro_v1
 from app.api.v1 import quality as quality_v1
 from app.api.v1 import risk as risk_v1
+from app.api.v1 import symbols as symbols_v1
+from app.api.v1 import ws as ws_v1
 from app.db.session import engine
 
 # Logging modül yüklenirken yapılandırılır — uvicorn başlamadan önce çalışsın diye.
@@ -52,8 +54,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         debug=settings.debug,
         version="0.1.0",
     )
+
+    # PriceHub upstream'leri başlat (Binance Spot + Futures combined streams)
+    from app.services.ws.price_hub import price_hub
+
+    await price_hub.start()
+
     yield
+
     logger.info("app_shutting_down")
+
+    # Hub'ı önce durdur (upstream task'ları cancel)
+    await price_hub.stop()
 
     # Lazy import to avoid circular at module load
     from app.core.redis_client import close_redis
@@ -113,6 +125,8 @@ app.include_router(correlations_v1.router, prefix="/api/v1")
 app.include_router(quality_v1.router, prefix="/api/v1")
 app.include_router(risk_v1.router, prefix="/api/v1")
 app.include_router(analysis_v1.router, prefix="/api/v1")
+app.include_router(symbols_v1.router, prefix="/api/v1")
+app.include_router(ws_v1.router, prefix="/api/v1")
 
 
 @app.get("/health")
