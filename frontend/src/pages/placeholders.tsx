@@ -78,22 +78,3 @@ export function Risk() {
   );
 }
 
-export function Settings() {
-  return (
-    <PlaceholderPage
-      title="Ayarlar"
-      description="Risk parametreleri, Auto-Watch, alarm tercihleri"
-      step="Adım 22-25"
-    />
-  );
-}
-
-export function Glossary() {
-  return (
-    <PlaceholderPage
-      title="Sözlük"
-      description="Teknik terimler + tooltip'lerin tam açıklamaları"
-      step="Adım 22"
-    />
-  );
-}

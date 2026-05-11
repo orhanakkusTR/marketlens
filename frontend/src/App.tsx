@@ -4,16 +4,16 @@ import { AppShell } from "@/components/layout/AppShell";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { Toaster } from "@/components/ui/toaster";
 import { Dashboard } from "@/pages/Dashboard";
+import { Glossary } from "@/pages/Glossary";
 import { Login } from "@/pages/Login";
 import { NotFound } from "@/pages/NotFound";
+import { Settings } from "@/pages/Settings";
 import { SymbolDetail } from "@/pages/SymbolDetail";
 import {
-  Glossary,
   Heatmap,
   Journal,
   Risk,
   Scanner,
-  Settings,
 } from "@/pages/placeholders";
 
 function App() {

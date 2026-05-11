@@ -7,7 +7,6 @@
  *
  * Tıklayınca → /symbol/{code}.
  */
-import { ChevronDown, ChevronUp, Diamond, Minus } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -22,11 +21,12 @@ interface Props {
 }
 
 function GradeBadge({ grade }: { grade: GradeSummary | undefined }) {
+  const base =
+    "flex h-5 w-full items-center justify-center rounded text-[10px] font-bold";
+
   if (!grade) {
     return (
-      <span className="inline-block w-7 text-center text-[10px] text-binance-text-muted">
-        —
-      </span>
+      <span className={cn(base, "text-binance-text-muted")}>—</span>
     );
   }
   // Yeni listelenen sembol (XAUUSDT senaryosu)
@@ -34,7 +34,10 @@ function GradeBadge({ grade }: { grade: GradeSummary | undefined }) {
     return (
       <span
         title="Bu sembol yeni listelendi, analiz hazır değil"
-        className="inline-flex h-4 items-center rounded-md border border-blue-400/60 px-1 text-[10px] font-medium text-blue-400"
+        className={cn(
+          base,
+          "border border-blue-400/70 bg-blue-400/10 text-blue-400"
+        )}
       >
         Yeni
       </span>
@@ -43,36 +46,60 @@ function GradeBadge({ grade }: { grade: GradeSummary | undefined }) {
 
   const letter = grade.grade;
   const styles: Record<string, string> = {
-    A: "bg-binance-long/20 text-binance-long border border-binance-long/40",
-    B: "bg-[#4ECCA3]/20 text-[#4ECCA3] border border-[#4ECCA3]/40",
-    C: "bg-binance-accent/20 text-binance-accent border border-binance-accent/40",
-    D: "bg-orange-400/20 text-orange-400 border border-orange-400/40",
-    NO_TRADE: "bg-binance-short/20 text-binance-short border border-binance-short/40",
+    A: "bg-binance-long text-white",
+    B: "bg-[#4ECCA3] text-binance-bg",
+    C: "bg-binance-accent text-binance-bg",
+    D: "bg-orange-500 text-white",
+    NO_TRADE: "bg-binance-short text-white",
   };
   const className = letter ? styles[letter] : "";
-  return (
-    <span
-      className={cn(
-        "inline-flex h-4 items-center rounded-md px-1 text-[10px] font-medium",
-        className
-      )}
-    >
-      {letter === "NO_TRADE" ? "✕" : letter}
-    </span>
-  );
+  const label = letter === "NO_TRADE" ? "DUR" : letter;
+  return <span className={cn(base, className)}>{label}</span>;
 }
 
 function DirectionIcon({ direction }: { direction: GradeSummary["direction"] }) {
   if (direction === "long") {
-    return <ChevronUp className="h-3 w-3 text-binance-long" />;
+    return (
+      <span
+        title="Long (yukarı yönlü setup)"
+        aria-label="Long"
+        className="font-bold leading-none text-binance-long"
+      >
+        ▲
+      </span>
+    );
   }
   if (direction === "short") {
-    return <ChevronDown className="h-3 w-3 text-binance-short" />;
+    return (
+      <span
+        title="Short (aşağı yönlü setup)"
+        aria-label="Short"
+        className="font-bold leading-none text-binance-short"
+      >
+        ▼
+      </span>
+    );
   }
   if (direction === "neutral") {
-    return <Minus className="h-3 w-3 text-binance-text-muted" />;
+    return (
+      <span
+        title="Nötr (yön yok)"
+        aria-label="Nötr"
+        className="leading-none text-binance-text-muted"
+      >
+        ◇
+      </span>
+    );
   }
-  return <Diamond className="h-3 w-3 text-binance-text-muted" />;
+  return (
+    <span
+      title="Yön bilgisi yok"
+      aria-label="Yön bilgisi yok"
+      className="leading-none text-binance-text-muted/60"
+    >
+      ◇
+    </span>
+  );
 }
 
 export function SymbolRow({ symbol, price, grade }: Props) {
@@ -104,23 +131,26 @@ export function SymbolRow({ symbol, price, grade }: Props) {
       onClick={handleClick}
       className={({ isActive }) =>
         cn(
-          "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors",
+          "grid items-center gap-1.5 rounded-md border-l-2 border-l-transparent py-1.5 pl-1.5 pr-2 text-xs transition-colors",
+          "grid-cols-[16px_44px_minmax(0,1fr)_58px_48px]",
           isActive
-            ? "bg-binance-border/60 text-binance-text-primary"
+            ? "border-l-binance-long bg-white/5 font-medium text-binance-text-primary"
             : "text-binance-text-secondary hover:bg-binance-border/30 hover:text-binance-text-primary"
         )
       }
     >
-      <DirectionIcon direction={grade?.direction ?? null} />
-      <span className="w-12 shrink-0 font-mono text-binance-text-primary">
+      <span className="flex justify-center">
+        <DirectionIcon direction={grade?.direction ?? null} />
+      </span>
+      <span className="truncate font-mono text-binance-text-primary">
         {shortenSymbol(symbol)}
       </span>
-      <span className="flex-1 truncate font-mono text-[11px] text-binance-text-secondary">
+      <span className="truncate font-mono text-[11px] tabular-nums text-binance-text-secondary">
         {price ? formatPrice(symbol, price.price) : "—"}
       </span>
       <span
         className={cn(
-          "w-12 shrink-0 text-right font-mono text-[11px]",
+          "text-right font-mono text-[11px] tabular-nums",
           changeColor
         )}
       >

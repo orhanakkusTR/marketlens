@@ -65,7 +65,19 @@
       "Bash(curl -s \"https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=XAUUSDT\")",
       "Bash(curl -s \"http://localhost:8000/api/v1/symbols/grades\")",
       "Bash(curl -s -o /dev/null -w \"Frontend: HTTP %{http_code}\\\\n\" http://localhost:5173/)",
-      "Bash(curl -s -o /dev/null -w \"Login page: HTTP %{http_code}\\\\n\" http://localhost:5173/login)"
+      "Bash(curl -s -o /dev/null -w \"Login page: HTTP %{http_code}\\\\n\" http://localhost:5173/login)",
+      "Bash(grep -nA 80 \"^## Adım 20\\\\|^### Adım 20\\\\|^# Adım 20\" /Users/wolf/Desktop/marketlens/docs/build-steps.md)",
+      "Bash(curl -sS http://localhost:8000/api/v1/macro/snapshot)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('DXY current/24h:', d['dxy']['current'], d['dxy'].get\\('change_24h_pct'\\), d['dxy'].get\\('direction_24h'\\)\\); print\\('SP500:', d['sp500']['current'], d['sp500'].get\\('change_24h_pct'\\)\\); print\\('VIX:', d['vix']['current'], d['vix'].get\\('change_24h_pct'\\)\\); print\\('F&G:', d['fear_greed']['value'], d['fear_greed']['classification']\\)\")",
+      "Bash(curl -sS http://localhost:8000/api/v1/analysis/full/BTCUSDT/4H -H \"Accept: application/json\" -o /tmp/btc.json -w \"status: %{http_code}\\\\n\")",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\('/tmp/btc.json'\\)\\); print\\('symbol:', d.get\\('symbol'\\)\\); print\\('price:', d.get\\('current_price'\\)\\); print\\('grade:', d.get\\('setup_quality',{}\\).get\\('grade'\\)\\); print\\('direction:', d.get\\('setup_quality',{}\\).get\\('direction'\\)\\); print\\('final_score:', d.get\\('final_confluence',{}\\).get\\('final_score'\\)\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); m=d['market_regime']; print\\('regime:', m['regime']\\); print\\('label:', m['label']\\); print\\('triggers:', m['triggers']\\)\")",
+      "Bash(curl -sS http://localhost:8000/api/v1/macro/regime-detail -w \"\\\\nstatus: %{http_code}\\\\n\" -o /tmp/rd.json)",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\('/tmp/rd.json'\\)\\); print\\(json.dumps\\(d, ensure_ascii=False, indent=2\\)\\)\")",
+      "Bash(curl -sS -o /tmp/rd.json -w \"status: %{http_code}\\\\n\" http://localhost:8000/api/v1/macro/regime-detail)",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\('/tmp/rd.json'\\)\\); print\\('regime:', d['regime'], '|', d['regime_label_tr']\\); print\\('grades:', d['setup_distribution']['grade_counts']\\); print\\('dirs:', d['setup_distribution']['direction_counts']\\); print\\('warnings:', d['warnings_tr']\\); print\\('strategy:', d['strategy_tr']\\)\")",
+      "Bash(curl -sS http://localhost:8000/api/v1/macro/regime-detail -w \"\\\\nstatus: %{http_code}\\\\n\" -o /tmp/rd2.json)",
+      "Bash(python3 -c \"import json; d=json.load\\(open\\('/tmp/rd2.json'\\)\\); da=d.get\\('detailed_analysis_tr', {}\\); print\\('--- market_state ---'\\); print\\(da.get\\('market_state',''\\)\\); print\\(\\); print\\('--- system_state ---'\\); print\\(da.get\\('system_state',''\\)\\); print\\(\\); print\\('--- risk_factors ---'\\); [print\\('-',r\\) for r in da.get\\('risk_factors',[]\\)]; print\\(\\); print\\('--- recommendation ---'\\); rec=da.get\\('recommendation',{}\\); print\\('summary:', rec.get\\('summary'\\)\\); [print\\('  •',b\\) for b in rec.get\\('bullets',[]\\)]\")"
     ]
   }
 }

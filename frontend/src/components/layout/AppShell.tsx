@@ -16,7 +16,7 @@ import { PriceWebSocketProvider } from "@/components/ws/PriceWebSocketProvider";
 export function AppShell() {
   return (
     <PriceWebSocketProvider>
-      <div className="grid h-screen grid-cols-[240px_1fr] bg-binance-bg">
+      <div className="grid h-screen grid-cols-[300px_1fr] bg-binance-bg">
         <Sidebar />
         <div className="flex h-screen flex-col overflow-hidden">
           <Topbar />
