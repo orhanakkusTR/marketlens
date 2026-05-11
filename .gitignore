@@ -30,6 +30,11 @@ build/
 .turbo/
 *.log
 
+# TypeScript / Vite build artifacts
+*.tsbuildinfo
+vite.config.d.ts
+vite.config.js
+
 # Coverage / build artifacts
 coverage/
 .nyc_output/

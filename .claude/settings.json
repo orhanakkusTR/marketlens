@@ -55,7 +55,13 @@
       "Bash(curl -s -o /dev/null -w \"BTC 4H: HTTP %{http_code}\\\\n\" \"http://localhost:8000/api/v1/analysis/full/BTCUSDT/4H\")",
       "Bash(curl -s -o /dev/null -w \"XAUUSDT 4H: HTTP %{http_code}\\\\n\" \"http://localhost:8000/api/v1/analysis/full/XAUUSDT/4H\")",
       "Bash(curl -s \"http://localhost:8000/api/v1/macro/snapshot\")",
-      "Bash(curl -s \"http://localhost:8000/api/v1/correlations/BTCUSDT\")"
+      "Bash(curl -s \"http://localhost:8000/api/v1/correlations/BTCUSDT\")",
+      "Bash(curl -s -o /dev/null -w \"Vite dev: %{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(curl -s -o /dev/null -w \"Login page: %{http_code}\\\\n\" http://localhost:5173/login)",
+      "Bash(curl -s -o /dev/null -w \"Symbol page: %{http_code}\\\\n\" http://localhost:5173/symbol/BTCUSDT)",
+      "Bash(curl -s http://localhost:5173/)",
+      "Bash(curl -s -X POST -H \"Content-Type: application/json\" -d '{\"email\":\"orhanakkustr@gmail.com\",\"password\":\"YanlisSifre\"}' http://localhost:8000/api/v1/auth/login)",
+      "Bash(curl -s -X POST -H \"Content-Type: application/json\" -d '{\"email\":\"orhanakkustr@gmail.com\",\"password\":\"TestPassword123\"}' http://localhost:8000/api/v1/auth/login)"
     ]
   }
 }

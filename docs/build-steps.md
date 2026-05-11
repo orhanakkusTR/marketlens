@@ -898,6 +898,16 @@ Login sayfası tam çalışsın.
 Protected routes wrapper.
 ```
 
+> **NOT (Future Roadmap — Production Hardening):**
+> - **Auth token storage:** MVP'de localStorage. Production deploy'da
+>   httpOnly cookie auth'a geçilebilir — XSS yüzey alanını minimize eder.
+>   Backend cookie endpoint ve CSRF token mekanizması eklenmesi gerekir.
+> - **Mobile responsive:** Adım 18 desktop-first. Tablet/mobile için
+>   responsive layout Adım 41 (Mobile PWA) kapsamında.
+> - **shadcn/ui Radix bileşenleri:** Adım 18'de Slot/Dialog/Tooltip/Tabs
+>   bağımlılıkları SKIP edildi. Adım 21 (Aksiyon Özeti modal, dropdown menu)
+>   itibariyle eklenecek.
+
 ---
 
 ### Adım 19: Sol Sembol Paneli
